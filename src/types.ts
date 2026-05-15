@@ -15,10 +15,17 @@ export type ReceiptInput = {
   purchasedAt?: string;
 };
 
+export type CategoryScore = {
+  category: Category;
+  score: number;
+};
+
 export type ClassificationResult = {
   merchantNormalized: string;
   category: Category | null;
   confidence: number;
   needsReview: boolean;
   reason: string;
+  reasons: string[];
+  scores: CategoryScore[];
 };

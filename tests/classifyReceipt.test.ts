@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 import { classifyReceipt } from "../src/classifyReceipt";
 
 describe("classifyReceipt", () => {
@@ -11,6 +12,8 @@ describe("classifyReceipt", () => {
 
     expect(result.category).toBe("食費");
     expect(result.needsReview).toBe(false);
+    expect(result.scores[0]?.category).toBe("食費");
+    expect(result.reasons).toContain("merchant_rule: セブンイレブン");
   });
 
   test("マツモトキヨシは日用品に分類する", () => {
@@ -35,14 +38,30 @@ describe("classifyReceipt", () => {
     expect(result.needsReview).toBe(true);
   });
 
-  test("未知の店舗は要確認にする", () => {
+  test("イオンでカテゴリ拮抗なら要確認にする", () => {
     const result = classifyReceipt({
-      merchantRaw: "知らない店",
-      items: [],
-      totalAmount: 1000
+      merchantRaw: "イオン",
+      items: ["牛乳", "洗剤"],
+      totalAmount: 980
     });
 
     expect(result.category).toBeNull();
     expect(result.needsReview).toBe(true);
+    expect(result.reason).toBe("ambiguous merchant requires review");
+  });
+
+  test("evaluation fixtureの期待を満たす", () => {
+    const fixture = JSON.parse(
+      readFileSync("fixtures/receipts/evaluation.json", "utf-8")
+    ) as Array<{
+      input: { merchantRaw: string; items?: string[]; totalAmount?: number };
+      expected: { category: string | null; needsReview: boolean };
+    }>;
+
+    for (const c of fixture) {
+      const result = classifyReceipt(c.input);
+      expect(result.category).toBe(c.expected.category);
+      expect(result.needsReview).toBe(c.expected.needsReview);
+    }
   });
 });
