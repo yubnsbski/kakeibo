@@ -27,6 +27,19 @@ describe("classifyReceipt", () => {
     expect(result.needsReview).toBe(false);
   });
 
+  test("ユーザー修正ルールを最優先で適用する", () => {
+    const result = classifyReceipt({
+      merchantRaw: "Amazon.co.jp",
+      items: [],
+      userCategoryOverrides: { Amazon: "通信" },
+      totalAmount: 3000
+    });
+
+    expect(result.category).toBe("通信");
+    expect(result.needsReview).toBe(false);
+    expect(result.reason).toBe("user_override: 通信");
+  });
+
   test("Amazonは明細なしなら要確認にする", () => {
     const result = classifyReceipt({
       merchantRaw: "Amazon.co.jp",
