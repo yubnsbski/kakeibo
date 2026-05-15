@@ -6,6 +6,21 @@ const MERCHANT_SCORE = 80;
 const ITEM_SCORE = 50;
 const SMALL_MARGIN = 20;
 
+function findUserOverrideCategory(
+  merchantNormalized: string,
+  userCategoryOverrides: Partial<Record<string, Category>> | undefined
+): Category | null {
+  if (!userCategoryOverrides) return null;
+
+  for (const [merchant, category] of Object.entries(userCategoryOverrides)) {
+    if (merchantNormalized.includes(normalizeMerchant(merchant))) {
+      return category as Category;
+    }
+  }
+
+  return null;
+}
+
 function toSortedScores(scoreMap: Partial<Record<Category, number>>): CategoryScore[] {
   return Object.entries(scoreMap)
     .map(([category, score]) => ({ category: category as Category, score: score ?? 0 }))
@@ -18,6 +33,22 @@ export function classifyReceipt(input: ReceiptInput): ClassificationResult {
   const items = input.items ?? [];
   const reasons: string[] = [];
   const scoreMap: Partial<Record<Category, number>> = {};
+
+  const userOverrideCategory = findUserOverrideCategory(
+    merchantNormalized,
+    input.userCategoryOverrides
+  );
+  if (userOverrideCategory) {
+    return {
+      merchantNormalized,
+      category: userOverrideCategory,
+      confidence: 0.99,
+      needsReview: false,
+      reason: `user_override: ${userOverrideCategory}`,
+      reasons: [`user_override`],
+      scores: [{ category: userOverrideCategory, score: 999 }]
+    };
+  }
 
   for (const merchant of ambiguousMerchants) {
     if (merchantNormalized.includes(merchant) && items.length === 0) {
