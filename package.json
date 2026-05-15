@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test"
+    "verify": "npm run typecheck && npm test",
+    "evaluate:matrix": "vitest run tests/evaluationMatrix.test.ts",
+    "verify:full": "npm run verify && npm run evaluate:matrix"
   },
   "keywords": [],
   "author": "",
