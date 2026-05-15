@@ -13,6 +13,7 @@ export type ReceiptInput = {
   items?: string[];
   totalAmount?: number;
   purchasedAt?: string;
+  userCategoryOverrides?: Partial<Record<string, Category>>;
 };
 
 export type CategoryScore = {
