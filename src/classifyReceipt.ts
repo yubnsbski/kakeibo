@@ -13,7 +13,10 @@ function findUserOverrideCategory(
   if (!userCategoryOverrides) return null;
 
   for (const [merchant, category] of Object.entries(userCategoryOverrides)) {
-    if (merchantNormalized.includes(normalizeMerchant(merchant))) {
+    const merchantKeyNormalized = normalizeMerchant(merchant);
+    if (!merchantKeyNormalized) continue;
+
+    if (merchantNormalized.includes(merchantKeyNormalized)) {
       return category as Category;
     }
   }

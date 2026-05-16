@@ -40,6 +40,21 @@ describe("classifyReceipt", () => {
     expect(result.reason).toBe("user_override: 通信");
   });
 
+
+
+  test("空のユーザー修正キーは無視する", () => {
+    const result = classifyReceipt({
+      merchantRaw: "セブンイレブン 渋谷店",
+      items: ["おにぎり"],
+      userCategoryOverrides: { "   ": "通信", Amazon: "娯楽" },
+      totalAmount: 300
+    });
+
+    expect(result.category).toBe("食費");
+    expect(result.needsReview).toBe(false);
+    expect(result.reason).not.toBe("user_override: 通信");
+  });
+
   test("Amazonは明細なしなら要確認にする", () => {
     const result = classifyReceipt({
       merchantRaw: "Amazon.co.jp",
