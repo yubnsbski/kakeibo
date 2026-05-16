@@ -14,6 +14,7 @@ export const ambiguousMerchants = [
   "Amazon",
   "楽天",
   "イオン",
+  "ドン・キホーテ",
   "ドンキホーテ",
   "メルカリ"
 ];
