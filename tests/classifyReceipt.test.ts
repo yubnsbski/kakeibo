@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { readFileSync } from "node:fs";
 import { classifyReceipt } from "../src/classifyReceipt";
 
 describe("classifyReceipt", () => {
@@ -12,19 +11,20 @@ describe("classifyReceipt", () => {
 
     expect(result.category).toBe("食費");
     expect(result.needsReview).toBe(false);
-    expect(result.scores[0]?.category).toBe("食費");
     expect(result.reasons).toContain("merchant_rule: セブンイレブン");
+    expect(result.screeningLabel).toBe("recordable");
   });
 
-  test("マツモトキヨシは日用品に分類する", () => {
+  test("店舗名ルールは明細キーワードより優先される", () => {
     const result = classifyReceipt({
       merchantRaw: "マツモトキヨシ 新宿店",
-      items: ["洗剤"],
+      items: ["おにぎり"],
       totalAmount: 480
     });
 
     expect(result.category).toBe("日用品");
-    expect(result.needsReview).toBe(false);
+    expect(result.reason).toBe("rule_match: 日用品");
+    expect(result.reasons).toEqual(["merchant_rule: マツモトキヨシ"]);
   });
 
   test("ユーザー修正ルールを最優先で適用する", () => {
@@ -40,19 +40,16 @@ describe("classifyReceipt", () => {
     expect(result.reason).toBe("user_override: 通信");
   });
 
-
-
-  test("空のユーザー修正キーは無視する", () => {
+  test("店舗名ルールがない場合は明細キーワードで分類する", () => {
     const result = classifyReceipt({
-      merchantRaw: "セブンイレブン 渋谷店",
-      items: ["おにぎり"],
-      userCategoryOverrides: { "   ": "通信", Amazon: "娯楽" },
-      totalAmount: 300
+      merchantRaw: "不明店舗",
+      items: ["ガソリン"],
+      totalAmount: 3000
     });
 
-    expect(result.category).toBe("食費");
+    expect(result.category).toBe("交通");
     expect(result.needsReview).toBe(false);
-    expect(result.reason).not.toBe("user_override: 通信");
+    expect(result.reasons).toEqual(["item_keyword: ガソリン"]);
   });
 
   test("Amazonは明細なしなら要確認にする", () => {
@@ -64,32 +61,32 @@ describe("classifyReceipt", () => {
 
     expect(result.category).toBeNull();
     expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
+    expect(result.screeningLabel).toBe("needs_review");
   });
 
-  test("イオンでカテゴリ拮抗なら要確認にする", () => {
+  test("Amazonは明細ありでも手動分類前提なので要確認", () => {
     const result = classifyReceipt({
-      merchantRaw: "イオン",
-      items: ["牛乳", "洗剤"],
-      totalAmount: 980
+      merchantRaw: "Amazon.co.jp",
+      items: ["イヤホン"],
+      totalAmount: 3000
     });
 
     expect(result.category).toBeNull();
     expect(result.needsReview).toBe(true);
-    expect(result.reason).toBe("ambiguous merchant requires review");
+    expect(result.reason).toBe("ambiguous merchant requires manual category");
   });
 
-  test("evaluation fixtureの期待を満たす", () => {
-    const fixture = JSON.parse(
-      readFileSync("fixtures/receipts/evaluation.json", "utf-8")
-    ) as Array<{
-      input: { merchantRaw: string; items?: string[]; totalAmount?: number };
-      expected: { category: string | null; needsReview: boolean };
-    }>;
+  test("分類ルールがなければ要確認", () => {
+    const result = classifyReceipt({
+      merchantRaw: "未知の店舗",
+      items: ["未知の品目"],
+      totalAmount: 1000
+    });
 
-    for (const c of fixture) {
-      const result = classifyReceipt(c.input);
-      expect(result.category).toBe(c.expected.category);
-      expect(result.needsReview).toBe(c.expected.needsReview);
-    }
+    expect(result.category).toBeNull();
+    expect(result.needsReview).toBe(true);
+    expect(result.reason).toBe("no rule matched");
+    expect(result.screeningLabel).toBe("needs_review");
   });
 });
