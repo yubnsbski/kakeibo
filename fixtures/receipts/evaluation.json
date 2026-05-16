@@ -1,0 +1,38 @@
+[
+  {
+    "name": "seven_food",
+    "input": {
+      "merchantRaw": "ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ 渋谷店",
+      "items": ["おにぎり", "牛乳"],
+      "totalAmount": 620
+    },
+    "expected": {
+      "category": "食費",
+      "needsReview": false
+    }
+  },
+  {
+    "name": "amazon_no_items",
+    "input": {
+      "merchantRaw": "Amazon.co.jp",
+      "items": [],
+      "totalAmount": 3000
+    },
+    "expected": {
+      "category": null,
+      "needsReview": true
+    }
+  },
+  {
+    "name": "aeon_mixed_items",
+    "input": {
+      "merchantRaw": "イオン",
+      "items": ["牛乳", "洗剤"],
+      "totalAmount": 980
+    },
+    "expected": {
+      "category": null,
+      "needsReview": true
+    }
+  }
+]
