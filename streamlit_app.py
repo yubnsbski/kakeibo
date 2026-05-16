@@ -120,6 +120,12 @@ def generate_dummy_results(num_records: int = 100) -> List[Dict]:
     return results
 
 
+def convert_results_to_csv(results: List[Dict]) -> bytes:
+    """Convert extraction results to UTF-8 CSV bytes for download."""
+    df = pd.DataFrame(results, columns=["field", "value", "confidence"])
+    return df.to_csv(index=False).encode("utf-8-sig")
+
+
 def summarize_results(results: List[Dict]) -> str:
     """Create a concise Japanese summary string from extracted results."""
     if not results:
@@ -183,6 +189,14 @@ def main() -> None:
         st.subheader("抽出結果")
         df = pd.DataFrame(results, columns=["field", "value", "confidence"])
         st.dataframe(df, use_container_width=True)
+
+        csv_bytes = convert_results_to_csv(results)
+        st.download_button(
+            label="CSVをダウンロード",
+            data=csv_bytes,
+            file_name="extraction_results.csv",
+            mime="text/csv",
+        )
 
         st.subheader("要約")
         st.write(summary)
