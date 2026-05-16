@@ -1,5 +1,5 @@
 import { classifyReceipt } from "./classifyReceipt";
-import type { Category, ReceiptInput } from "./types";
+import type { Category, ClassificationResult, ReceiptInput } from "./types";
 
 export type CsvReceiptRow = {
   receipt_id: string;
@@ -26,10 +26,26 @@ export type AutomatedClassificationRow = {
   amount: number;
   purchased_at: string;
   validation_error?: InputValidationErrorCode;
+  validation_message?: string;
+};
+
+export type RunClassificationResult = {
+  ok: true;
+  output: ClassificationResult;
+} | {
+  ok: false;
+  error: InputValidationErrorCode;
+  message: string;
 };
 
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
+
+const VALIDATION_MESSAGES: Record<InputValidationErrorCode, string> = {
+  missing_merchant: "店舗名を入力してください",
+  invalid_total_amount: "金額は0より大きい値を入力してください",
+  invalid_purchased_at: "日付はYYYY-MM-DD形式で入力してください"
+};
 
 export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
   const lines = csvText
@@ -65,8 +81,39 @@ export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
 export function validateCsvRowInput(row: CsvReceiptRow): InputValidationErrorCode | null {
   if (!row.merchantRaw.trim()) return "missing_merchant";
   if (!Number.isFinite(row.totalAmount) || row.totalAmount <= 0) return "invalid_total_amount";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(row.purchasedAt)) return "invalid_purchased_at";
+  if (!isValidDateYYYYMMDD(row.purchasedAt)) return "invalid_purchased_at";
   return null;
+}
+
+function isValidDateYYYYMMDD(dateText: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return false;
+  const d = new Date(`${dateText}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.toISOString().slice(0, 10) === dateText;
+}
+
+export function runClassification(
+  input: ReceiptInput,
+  receiptId = "single-001"
+): RunClassificationResult {
+  const normalizedInput: CsvReceiptRow = {
+    receipt_id: receiptId,
+    merchantRaw: input.merchantRaw,
+    items: input.items ?? [],
+    totalAmount: input.totalAmount ?? NaN,
+    purchasedAt: input.purchasedAt ?? ""
+  };
+
+  const validationError = validateCsvRowInput(normalizedInput);
+  if (validationError) {
+    return {
+      ok: false,
+      error: validationError,
+      message: VALIDATION_MESSAGES[validationError]
+    };
+  }
+
+  return { ok: true, output: classifyReceipt(input) };
 }
 
 export function runClassificationFromCsvRows(
@@ -88,7 +135,8 @@ export function runClassificationFromCsvRows(
         confidence: 0,
         amount: Number.isFinite(row.totalAmount) ? row.totalAmount : 0,
         purchased_at: row.purchasedAt,
-        validation_error: validationError
+        validation_error: validationError,
+        validation_message: VALIDATION_MESSAGES[validationError]
       };
     }
 
