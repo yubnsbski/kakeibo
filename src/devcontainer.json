@@ -1,0 +1,38 @@
+{
+  "name": "kakeibo",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert libtesseract-dev libgl1 libglib2.0-0 && curl -LsSf https://astral.sh/uv/install.sh | sh && echo 'export PATH=$HOME/.local/bin:$PATH' >> $HOME/.bashrc",
+  "remoteEnv": {
+    "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "[python]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+  "forwardPorts": [5173, 8000],
+  "portsAttributes": {
+    "5173": { "label": "Vite Frontend (dev)" },
+    "8000": { "label": "FastAPI Backend" }
+  }
+}
