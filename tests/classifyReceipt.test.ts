@@ -66,6 +66,18 @@ describe("classifyReceipt", () => {
     expect(result.needsReview).toBe(true);
   });
 
+  test("ドン・キホーテは明細なしなら要確認にする", () => {
+    const result = classifyReceipt({
+      merchantRaw: "ドン・キホーテ 渋谷店",
+      items: [],
+      totalAmount: 2500
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.needsReview).toBe(true);
+    expect(result.reason).toBe("ambiguous merchant: ドンキホーテ");
+  });
+
   test("イオンでカテゴリ拮抗なら要確認にする", () => {
     const result = classifyReceipt({
       merchantRaw: "イオン",
