@@ -70,3 +70,19 @@ CSV列は以下で固定する（列名変更禁止）。
 - review率（`needs_review=yes` の割合）
 
 この2つだけを見る。バックアップ件数は日次チェック対象外。
+
+
+---
+
+## 5) 入力の自動化（CSVバッチ）
+CSVヘッダーを次で固定する。
+`receipt_id,merchantRaw,items,totalAmount,purchasedAt`
+
+実行手順（バックエンド処理）:
+1. CSVを読み込む
+2. 入力チェックを通す（店舗名必須・金額>0・日付 `YYYY-MM-DD`）
+3. 各行を `classifyReceipt` で分類する
+4. 結果を `result.csv` として出力する
+
+`items` 列は `|` 区切り（例: `おにぎり|牛乳`）を使う。
+入力不正行は `needs_review=yes` とし、`reason` にエラーコードを入れる。
