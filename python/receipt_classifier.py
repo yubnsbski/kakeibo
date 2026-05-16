@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+import streamlit as st
 
 Category = str
 
@@ -58,12 +60,7 @@ class ClassificationResult:
 
 
 def normalize_merchant(raw: str) -> str:
-    text = (
-        raw.strip()
-        .replace(" ", "")
-        .replace("\t", "")
-        .replace("\n", "")
-    )
+    text = raw.strip().replace(" ", "").replace("\t", "").replace("\n", "")
     return (
         text.replace("ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ", "セブンイレブン")
         .replace("セブン-イレブン", "セブンイレブン")
@@ -182,3 +179,155 @@ def classify_receipt(
         reasons=reasons,
         scores=scores,
     )
+
+
+def parse_items(items_text: str) -> List[str]:
+    return [line.strip() for line in items_text.splitlines() if line.strip()]
+
+
+def parse_user_overrides(overrides_text: str) -> Tuple[Dict[str, Category], List[str]]:
+    """
+    入力形式:
+    セブンイレブン=日用品
+    Amazon=仕事
+    """
+    overrides: Dict[str, Category] = {}
+    errors: List[str] = []
+
+    for line_number, raw_line in enumerate(overrides_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if "=" not in line:
+            errors.append(f"{line_number}行目: '=' がありません: {line}")
+            continue
+
+        merchant, category = [part.strip() for part in line.split("=", 1)]
+        if not merchant or not category:
+            errors.append(f"{line_number}行目: 店舗名またはカテゴリが空です: {line}")
+            continue
+
+        overrides[merchant] = category
+
+    return overrides, errors
+
+
+def render_rule_tables() -> None:
+    st.sidebar.header("分類ルール")
+
+    st.sidebar.subheader("店舗ルール")
+    st.sidebar.dataframe(
+        [{"店舗": merchant, "カテゴリ": category} for merchant, category in MERCHANT_RULES.items()],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.sidebar.subheader("曖昧店舗")
+    st.sidebar.dataframe(
+        [{"店舗": merchant} for merchant in AMBIGUOUS_MERCHANTS],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.sidebar.subheader("明細キーワード")
+    st.sidebar.dataframe(
+        [{"キーワード": keyword, "カテゴリ": category} for keyword, category in ITEM_KEYWORD_RULES.items()],
+        hide_index=True,
+        use_container_width=True,
+    )
+
+
+def render_result(result: ClassificationResult) -> None:
+    category_label = result.category if result.category else "要確認"
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("分類カテゴリ", category_label)
+    col2.metric("信頼度", f"{result.confidence:.2f}")
+    col3.metric("レビュー要否", "必要" if result.needs_review else "不要")
+
+    st.subheader("判定結果")
+    st.write(
+        {
+            "正規化店舗名": result.merchant_normalized,
+            "カテゴリ": result.category,
+            "レビュー要否": result.needs_review,
+            "代表理由": result.reason,
+        }
+    )
+
+    st.subheader("判定理由")
+    if result.reasons:
+        st.write(result.reasons)
+    else:
+        st.write("理由なし")
+
+    st.subheader("スコア")
+    if result.scores:
+        st.dataframe(
+            [{"カテゴリ": score.category, "スコア": score.score} for score in result.scores],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.info("スコアはありません。")
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="家計簿レシート分類デモ",
+        page_icon="🧾",
+        layout="wide",
+    )
+
+    st.title("家計簿レシート分類デモ")
+    st.caption("OCR後の店舗名・明細テキストを入力し、カテゴリ・信頼度・レビュー要否を表示します。")
+
+    render_rule_tables()
+
+    with st.form("receipt_classification_form"):
+        merchant_raw = st.text_input(
+            "店舗名",
+            value="ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ 渋谷店",
+            help="OCR後の店舗名を入力します。",
+        )
+
+        items_text = st.text_area(
+            "明細（1行1品目）",
+            value="おにぎり\n牛乳",
+            height=140,
+            help="レシート明細を1行ずつ入力します。空でも分類できます。",
+        )
+
+        overrides_text = st.text_area(
+            "ユーザー補正ルール（任意 / 1行: 店舗=カテゴリ）",
+            value="",
+            height=100,
+            help="例: Amazon=仕事",
+        )
+
+        submitted = st.form_submit_button("分類する")
+
+    if not submitted:
+        st.info("店舗名と明細を入力し、「分類する」を押してください。")
+        return
+
+    items = parse_items(items_text)
+    user_overrides, override_errors = parse_user_overrides(overrides_text)
+
+    if override_errors:
+        st.warning("ユーザー補正ルールに不備があります。該当行は無視されます。")
+        for error in override_errors:
+            st.write(f"- {error}")
+
+    result = classify_receipt(
+        merchant_raw=merchant_raw,
+        items=items,
+        user_category_overrides=user_overrides,
+    )
+
+    render_result(result)
+
+
+if __name__ == "__main__":
+    main()
