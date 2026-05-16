@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   exportAutomatedClassificationCsv,
   parseReceiptCsv,
+  runClassification,
   runClassificationFromCsvRows,
   validateCsvRowInput
 } from "../src/inputAutomation";
@@ -28,6 +29,21 @@ describe("inputAutomation", () => {
     expect(result[2].category).toBe("REVIEW");
     expect(result[2].needs_review).toBe("yes");
     expect(result[2].reason).toBe("no rule matched");
+  });
+
+  test("単票runClassificationで入力エラーを返す", () => {
+    const bad = runClassification({
+      merchantRaw: "",
+      items: ["おにぎり"],
+      totalAmount: 100,
+      purchasedAt: "2026-05-16"
+    });
+
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.error).toBe("missing_merchant");
+      expect(bad.message).toContain("店舗名");
+    }
   });
 
   test("入力チェック（店舗名必須・金額>0・日付形式）", () => {
