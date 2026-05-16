@@ -1,4 +1,6 @@
+import random
 import re
+from datetime import date, timedelta
 from typing import Dict, List
 
 import pandas as pd
@@ -21,7 +23,6 @@ def read_uploaded_file(uploaded_file) -> str:
 
     if extension == "pdf":
         # Mock behavior for initial version: no OCR/API, lightweight placeholder parsing.
-        # We attempt to decode binary as text with ignore to keep this version dependency-free.
         raw = uploaded_file.read()
         text = raw.decode("utf-8", errors="ignore").strip()
         if not text:
@@ -97,6 +98,28 @@ def extract_fields(text: str, selected_fields: List[str]) -> List[Dict]:
     return results
 
 
+def generate_dummy_results(num_records: int = 100) -> List[Dict]:
+    """Create dummy extraction results with exactly 100 records by default."""
+    merchants = ["スーパーA", "コンビニB", "ドラッグストアC", "書店D", "カフェE"]
+    fields = ["日付", "金額", "取引先名"]
+    base_date = date(2026, 1, 1)
+
+    results: List[Dict] = []
+    for i in range(num_records):
+        field = fields[i % len(fields)]
+        if field == "日付":
+            value = (base_date + timedelta(days=i)).isoformat()
+        elif field == "金額":
+            value = f"¥{random.randint(100, 20000):,}"
+        else:
+            value = merchants[i % len(merchants)]
+
+        confidence = round(random.uniform(0.55, 0.99), 2)
+        results.append({"field": field, "value": value, "confidence": confidence})
+
+    return results
+
+
 def summarize_results(results: List[Dict]) -> str:
     """Create a concise Japanese summary string from extracted results."""
     if not results:
@@ -109,9 +132,14 @@ def summarize_results(results: List[Dict]) -> str:
         if item["confidence"] < 0.5:
             low_conf.append(item["field"])
 
-    summary = "、".join(parts) + "。"
+    summary = "、".join(parts[:5])
+    if len(results) > 5:
+        summary += f" など合計{len(results)}件を抽出しました。"
+    else:
+        summary += "。"
+
     if low_conf:
-        summary += f" ただし {', '.join(low_conf)} は信頼度が低いため確認を推奨します。"
+        summary += f" ただし {', '.join(sorted(set(low_conf)))} は信頼度が低いため確認を推奨します。"
     return summary
 
 
@@ -121,6 +149,7 @@ def main() -> None:
     with st.sidebar:
         uploaded_file = st.file_uploader("ファイルをアップロード", type=["pdf", "txt"])
         selected_fields = st.multiselect("抽出対象フィールド", ["日付", "金額", "取引先名"])
+        use_dummy = st.checkbox("ダミーデータ100件を使用", value=False)
         run_button = st.button("解析実行")
 
     if uploaded_file:
@@ -129,29 +158,34 @@ def main() -> None:
         st.info("ファイル未アップロード")
 
     if run_button:
-        if uploaded_file is None:
-            st.warning("先にPDFまたはTXTファイルをアップロードしてください。")
-            return
-        if not selected_fields:
-            st.warning("抽出対象フィールドを1つ以上選択してください。")
-            return
+        if use_dummy:
+            results = generate_dummy_results(100)
+            st.warning("ダミーデータ100件を表示しています。")
+        else:
+            if uploaded_file is None:
+                st.warning("先にPDFまたはTXTファイルをアップロードしてください。")
+                return
+            if not selected_fields:
+                st.warning("抽出対象フィールドを1つ以上選択してください。")
+                return
 
-        try:
-            text = read_uploaded_file(uploaded_file)
-            results = extract_fields(text, selected_fields)
-            summary = summarize_results(results)
+            try:
+                text = read_uploaded_file(uploaded_file)
+                results = extract_fields(text, selected_fields)
+            except ValueError as e:
+                st.warning(str(e))
+                return
+            except Exception as e:
+                st.error(f"解析中に予期しないエラーが発生しました: {e}")
+                return
 
-            st.subheader("抽出結果")
-            df = pd.DataFrame(results, columns=["field", "value", "confidence"])
-            st.dataframe(df, use_container_width=True)
+        summary = summarize_results(results)
+        st.subheader("抽出結果")
+        df = pd.DataFrame(results, columns=["field", "value", "confidence"])
+        st.dataframe(df, use_container_width=True)
 
-            st.subheader("要約")
-            st.write(summary)
-
-        except ValueError as e:
-            st.warning(str(e))
-        except Exception as e:
-            st.error(f"解析中に予期しないエラーが発生しました: {e}")
+        st.subheader("要約")
+        st.write(summary)
 
 
 if __name__ == "__main__":
