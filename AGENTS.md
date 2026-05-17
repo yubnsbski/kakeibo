@@ -1,112 +1,104 @@
 # AGENTS.md
 
 ## 目的
-家族共有の家計簿アプリ。自宅LAN内でレシート画像をアップロードし、OCR・分類エンジン経由で取引を記録する。
+家族共有の家計簿アプリ. レシート画像をOCR・分類エンジン経由で取引登録, 明細単位でカテゴリ管理.
 
-## 構成
-- **フロント**: React 19 + Vite + TypeScript（`frontend/`）
-- **バック**: Python 3.13 + FastAPI + SQLite + SQLModel（`backend/`）
-- **OCR**: Tesseract 5 (`jpn` / `jpn_vert`) + OpenCV前処理
-- **分類**: ルールベース（旧TS実装をPython移植、`backend/app/classifier/`）
-- **デプロイ**: 自宅PC、`uvicorn`単一プロセスでフロント `dist/` も配信
-- **認証**: なし（信頼LAN前提）
+## 構成 (Python一本化)
+- **フロント**: React 19 + Vite + TypeScript (`frontend/`)
+- **バック**: Python 3.13 + FastAPI + SQLite + SQLModel (`backend/`)
+- **OCR**: Tesseract 5 + OpenCV
+- **分類**: ルールベース (`backend/app/classifier/`)
+- **デプロイ**: 自宅PC, uvicorn 単一プロセス
+- **認証**: なし (信頼LAN前提)
 
-## ディレクトリ
+## ディレクトリ (確定)
 - `backend/` Python本体
-- `backend/app/classifier/` 分類エンジン（types/normalize/rules/classify）
-- `backend/app/ocr/` OCR + 前処理
+- `backend/app/classifier/` 分類エンジン (rules.py がルール正書)
+- `backend/app/ocr/` OCR
 - `backend/app/routers/` REST API
-- `frontend/` 既存React
-- `docs/` 仕様書（classification-policy / danger-points / operation-playbook）
-- `fixtures/` 分類エンジンテストデータ
+- `backend/tests/` pytest
+- `frontend/` React UI
+- `docs/` 仕様書
+- `fixtures/receipts/` 分類テストデータ
 - `scripts/` バックアップ等
+- `.github/workflows/` CI/CD
 
-## 今回作るもの
-- 取引CRUD API
-- カテゴリ管理 / ユーザー修正ルール永続化
-- レシート画像アップロード + OCR
-- 分類エンジン（Python移植版、旧TSと同等動作）
-- フロント接続（既存App.tsx改修、`/api/*` proxy経由）
-- バックアップ運用スクリプト（cron）
-- pytest 自動テスト
+## 廃止 (Python一本化に伴う削除)
+以下は **archive/ts-engine ブランチに退避済み**, ルートからは削除:
+- `src/` (TS分類エンジン旧版)
+- `tests/` (TS テスト)
+- `package.json`, `tsconfig.json`, `node_modules/`
 
-## 今回作らないもの
-- 認証（信頼LAN前提）
-- HTTPS（LAN内、必要なら後でTailscale等）
-- 外部公開（インターネット越しアクセス）
-- モバイルネイティブアプリ
-- 予算管理機能（旧 `walletEngine.ts` は将来検討、`archive/ts-engine` ブランチに退避）
-- 外部LLM / Cloud OCR API
+旧TSコードへの依存は禁止. ロジック追加・修正は **Python 側のみ**で行う.
 
-## 分類ルール（旧方針継承）
-優先順位:
-1. ユーザー修正ルール
-2. 店舗名ルール
-3. 明細キーワードルール
-4. 曖昧店舗判定
-5. 要確認（needs_review）
+## カテゴリ (9種, 税率付き)
+食費(8%) / 酒類(10%) / 外食(10%) / 日用品(10%) / 交通費(10%) / 医療費(10%) / 娯楽費(10%) / 衣料費(10%) / その他(10%)
 
-### 危険店舗（明細なし時 needs_review 必須）
+税率の正書: `backend/app/database.py` の `_INITIAL_CATEGORIES` + DB `category_master` テーブル.
+
+## 分類ルール優先順位
+1. ユーザー修正ルール (DB `user_category_overrides`)
+2. 店舗名ルール (`backend/app/classifier/rules.py` の `merchant_rules`)
+3. 明細キーワードルール (`item_keyword_rules`)
+4. 曖昧店舗判定 (`ambiguous_merchants` で needs_review=true)
+5. 分類不能 → needs_review=true
+
+### 危険店舗 (明細なし時 needs_review 必須)
 Amazon / 楽天 / イオン / ドンキホーテ / メルカリ
 
-### カテゴリ（固定）
-食費 / 日用品 / 交通 / 医療 / 通信 / 娯楽 / 教育 / その他
+## データモデル (C4: 明細単位対応)
+- `transactions` (ヘッダ: 店舗, 日付, 合計, 主カテゴリ)
+- `transaction_items` (明細: 品目, 金額, カテゴリ, 税率)
+- `receipts` (OCR画像メタ)
+- `user_category_overrides` (ユーザー修正履歴)
+- `category_master` (カテゴリ + 税率)
 
-## CSV列契約（`docs/operation-playbook.md` §3 準拠、列名・順序固定）
-1. `receipt_id`
-2. `merchant_normalized`
-3. `items_text`
-4. `screening_category`
-5. `needs_review`
-6. `reason`
-7. `confidence`
-8. `amount`
-9. `purchased_at`
+明細を追加した取引は, ヘッダの amount / screening_category がサーバ側で**自動再計算**される.
 
-DBスキーマ・API レスポンスもこの命名（snake_case）に従う。
-変更時は `docs/` と DB マイグレーションを**同時実施**。
+## CSV列契約 (`docs/operation-playbook.md` §3, 列名・順序固定)
+1. receipt_id
+2. merchant_normalized
+3. items_text
+4. screening_category
+5. needs_review
+6. reason
+7. confidence
+8. amount
+9. purchased_at
 
-## 入力ルール（playbook §1 準拠）
-- 原文（`merchantRaw`）を改変しない。正規化はエンジン側で実施。
-- 店舗名・明細が不明でも空で通し、**推測補完しない**。
-- 手動補正は `userCategoryOverrides`（DBに永続化）でのみ行う。
+DB列・API レスポンスもこの命名 (snake_case) に準拠.
+変更時は `docs/` と DB マイグレーションを**同時実施**.
+
+## バックアップ運用
+- L1 ローカル: `scripts/backup.sh` で `backups/YYYYMMDD_HHMMSS/` (DB + uploads)
+- L2 Git: `scripts/push_db_to_git.sh` で `backup/data` ブランチへ DB push (プライベートリポジトリ前提)
+- 詳細: `scripts/README.md`
 
 ## 禁止事項
-- APIキー・個人情報をコード直書きしない（`backend/.env` 利用、`.env` は `.gitignore`）
-- 依存パッケージは `pyproject.toml`（バック）・`package.json`（フロント）経由でのみ追加
-- OCR結果を勝手に補完しない
-- DB スキーマ変更は Alembic 経由のみ（裸SQL即時実行禁止）
-- 列契約（CSV列）の列名・順序変更を docs 更新なしに行わない
+- ルート `src/`, `tests/`, `package.json` 等を**復活させない** (Python一本化方針)
+- TS分類エンジンを再実装しない (ロジック追加は `backend/app/classifier/`)
+- APIキーをコードに直書き
+- DB スキーマ変更を Alembic / 手動マイグレーション無しに行う
+- CSV列契約の列名・順序変更を docs 更新なしに行う
+- OCR結果を勝手に補完する
+- 依存パッケージを pyproject.toml / package.json 経由以外で追加
 
-## テスト
-- バック: `cd backend && uv run pytest`
-- フロント: `cd frontend && npm run lint`（テストはMVP段階では未整備）
-- 統合: `scripts/verify.sh`（将来）
-
-## 環境
-- 開発: Codespaces / devcontainer（Python 3.13 + Node 22 + Tesseract）
-- 本番: 自宅PC（OS確定後にデプロイ手順を `docs/deploy.md` へ追加）
+## CI/CD
+GitHub Actions:
+- `backend-ci.yml`: backend/ 変更時に pytest + ruff
+- `frontend-ci.yml`: frontend/ 変更時に typecheck + lint
+- `policy-guard.yml`: AGENTS.md / rules.py / models.py / database.py / pyproject.toml 変更時に `needs-human-approval` ラベル
+- `automerge.yml`: `auto-merge-safe` ラベル + `needs-human-approval` 不在で自動マージ
 
 ## エージェント運用ルール
 実装前:
-- `docs/classification-policy.md` / `docs/danger-points.md` / `docs/operation-playbook.md` を読む
+- `AGENTS.md`, `docs/classification-policy.md`, `docs/operation-playbook.md` を読む
 - 変更対象ファイルを列挙してから着手
-- 仕様変更時は `docs/` と AGENTS.md を**同時更新**
 
 実装後:
-- バック変更時: `uv run pytest` を通す
-- フロント変更時: `npm run lint` を通す
+- backend 変更時: `cd backend && uv run pytest -v && uv run ruff check .`
+- frontend 変更時: `cd frontend && npx tsc --noEmit && npm run lint`
 
-禁止:
-- 分類・OCR・予算管理のロジック変更時、対応するテストを更新せずにマージ
-- CSV列契約の列名・順序変更を docs 更新なしに行う
-
-## 旧資産
-- 旧TS実装（ルートの `src/` `tests/` `package.json` `tsconfig.json`）: `archive/ts-engine` ブランチへ退避済み（または退避予定）
-- 旧 `walletEngine.ts` の予算管理ロジック: 将来Python移植検討
-- 旧 `inputAutomation.ts` のCSVバッチ処理: Python版（`backend/app/routers/csv_import.py`）へ移植
-
-## ブランチ運用
-- 開発: `feature/python-backend`
-- 退避: `archive/ts-engine`（旧TS実装一式）
-- 本流: `main`（MVP完成後マージ）
+破壊禁止:
+- 既存テスト (test_classify.py, test_tax.py, test_items_api.py 等) を**期待値変更なしに**失敗させない
+- DB スキーマを互換性なく変更しない (`data.db` リセットが必要な変更は docs 更新と同時)

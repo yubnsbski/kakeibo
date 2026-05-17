@@ -1,38 +1,17 @@
 [
   {
     "name": "convenience_food",
-    "input": {
-      "merchantRaw": "ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ 渋谷店",
-      "items": ["おにぎり", "牛乳"],
-      "totalAmount": 620
-    },
-    "expected": {
-      "category": "食費",
-      "needsReview": false
-    }
+    "input": {"merchantRaw": "ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ 渋谷店", "items": ["おにぎり", "牛乳"], "totalAmount": 620},
+    "expected": {"category": "食費", "needsReview": false}
   },
   {
     "name": "ambiguous_amazon_no_items",
-    "input": {
-      "merchantRaw": "Amazon.co.jp",
-      "items": [],
-      "totalAmount": 3000
-    },
-    "expected": {
-      "category": null,
-      "needsReview": true
-    }
+    "input": {"merchantRaw": "Amazon.co.jp", "items": [], "totalAmount": 3000},
+    "expected": {"category": null, "needsReview": true}
   },
   {
     "name": "drugstore_daily_goods",
-    "input": {
-      "merchantRaw": "マツモトキヨシ 新宿店",
-      "items": ["洗剤"],
-      "totalAmount": 480
-    },
-    "expected": {
-      "category": "日用品",
-      "needsReview": false
-    }
+    "input": {"merchantRaw": "マツモトキヨシ 新宿店", "items": ["洗剤"], "totalAmount": 480},
+    "expected": {"category": "日用品", "needsReview": false}
   }
 ]

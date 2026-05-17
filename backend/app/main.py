@@ -1,19 +1,13 @@
-"""FastAPI entry point.
-
-Single uvicorn process serves the API at /api/* and (in production) the
-built frontend dist/ at /. CORS is enabled only for the Vite dev server
-during development (localhost:5173).
-
-Run: `uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
-"""
+"""FastAPI entry point."""
 from __future__ import annotations
-
 from contextlib import asynccontextmanager
-
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .database import create_db_and_tables
+from .routers import categories, overrides, receipts, transactions
 
 
 @asynccontextmanager
@@ -22,21 +16,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(
-    title="kakeibo API",
-    version="0.1.0",
-    description="Family-shared household budget app backend",
-    lifespan=lifespan,
-)
+app = FastAPI(title="kakeibo API", version="0.3.0", lifespan=lifespan)
 
-# Dev only: Vite dev server on localhost:5173. Production serves frontend
-# from the same origin (no CORS needed).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -46,3 +30,13 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+app.include_router(receipts.router)
+app.include_router(transactions.router)
+app.include_router(overrides.router)
+app.include_router(categories.router)
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
