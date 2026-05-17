@@ -26,5 +26,8 @@ export const itemKeywordRules: Record<string, Category> = {
   シャンプー: "日用品",
   薬: "医療",
   ガソリン: "交通",
-  本: "教育"
+  本: "教育",
+  イヤホン: "通信",
+  充電器: "通信",
+  映画: "娯楽"
 };

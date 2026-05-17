@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test"
+    "verify": "npm run typecheck && npm test",
+    "dev": "tsc --outDir .tmp-runtime src/server.ts src/classifyReceipt.ts src/normalizeMerchant.ts src/rules.ts src/types.ts && node .tmp-runtime/server.js"
   },
   "keywords": [],
   "author": "",
