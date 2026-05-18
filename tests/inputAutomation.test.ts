@@ -144,6 +144,18 @@ describe("inputAutomation", () => {
     expect(rows[0].totalAmount).toBe(1280);
   });
 
+  test("CSVのエスケープ引用符を含む列を正しく解釈する", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,\"A\"\"Mart\",牛乳,450,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].merchantRaw).toBe("A\"Mart");
+    expect(rows[0].totalAmount).toBe(450);
+  });
+
   test("クオート不正の行はスキップしwarningsを返す", () => {
     const csv = [
       "receipt_id,merchantRaw,items,totalAmount,purchasedAt",

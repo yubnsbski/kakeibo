@@ -53,6 +53,7 @@ const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
 const INPUT_COLUMN_COUNT = 5;
 const RECEIPT_ID_COLUMN_INDEX = 0;
 const MERCHANT_COLUMN_INDEX = 1;
+const ITEMS_START_COLUMN_INDEX = 2;
 const PURCHASED_AT_COLUMN_INDEX = -1;
 const NORMALIZED_INPUT_HEADER = normalizeHeader(INPUT_HEADER);
 
@@ -115,7 +116,9 @@ function parseInputDataRow(row: string): CsvReceiptRow | null {
   const receipt_id = columns[RECEIPT_ID_COLUMN_INDEX] ?? "";
   const merchantRaw = columns[MERCHANT_COLUMN_INDEX] ?? "";
   const purchasedAt = columns.at(PURCHASED_AT_COLUMN_INDEX) ?? "";
-  const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(columns.slice(2, -1));
+  const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(
+    columns.slice(ITEMS_START_COLUMN_INDEX, PURCHASED_AT_COLUMN_INDEX)
+  );
 
   return {
     receipt_id,
@@ -134,11 +137,13 @@ function parseCsvLine(line: string): string[] | null {
   let current = "";
   let inQuotes = false;
   let fieldStarted = false;
+  const DOUBLE_QUOTE = '"';
+  const COMMA = ",";
 
   for (let i = 0; i < line.length; i += 1) {
     const ch = line[i];
 
-    if (ch === '"') {
+    if (ch === DOUBLE_QUOTE) {
       if (!inQuotes) {
         if (fieldStarted) return null;
         inQuotes = true;
@@ -146,15 +151,15 @@ function parseCsvLine(line: string): string[] | null {
         continue;
       }
 
-      if (line[i + 1] === '"') {
-        current += '"';
+      if (line[i + 1] === DOUBLE_QUOTE) {
+        current += DOUBLE_QUOTE;
         i += 1;
         fieldStarted = true;
         continue;
       }
 
       const next = line[i + 1];
-      if (next !== "," && next !== undefined) {
+      if (next !== COMMA && next !== undefined) {
         return null;
       }
       inQuotes = false;
@@ -162,7 +167,7 @@ function parseCsvLine(line: string): string[] | null {
       continue;
     }
 
-    if (ch === "," && !inQuotes) {
+    if (ch === COMMA && !inQuotes) {
       values.push(current);
       current = "";
       fieldStarted = false;
