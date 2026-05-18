@@ -41,10 +41,12 @@ export type RunClassificationResult = {
 export type ParseCsvResult = {
   rows: CsvReceiptRow[];
   error?: "invalid_header";
-  warnings?: Array<{
-    row: number;
-    code: "invalid_csv_row";
-  }>;
+  warnings?: CsvParseWarning[];
+};
+
+type CsvParseWarning = {
+  row: number;
+  code: "invalid_csv_row";
 };
 
 const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
@@ -81,34 +83,19 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
 
   rows.forEach((row, index) => {
     const rowNumber = index + 2;
-    const columns = parseCsvLine(row);
-    if (!isValidInputRow(columns)) {
+    const parsedRow = parseInputDataRow(row);
+    if (!parsedRow) {
       addInvalidCsvRowWarning(warnings, rowNumber);
       return;
     }
-
-    const receipt_id = columns[0] ?? "";
-    const merchantRaw = columns[1] ?? "";
-    const purchasedAt = columns.at(-1) ?? "";
-    const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(columns.slice(2, -1));
-
-    parsedRows.push({
-      receipt_id,
-      merchantRaw,
-      items: itemsRaw
-        .split("|")
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0),
-      totalAmount: parseTotalAmount(totalAmountRaw),
-      purchasedAt
-    });
+    parsedRows.push(parsedRow);
   });
 
   return warnings.length > 0 ? { rows: parsedRows, warnings } : { rows: parsedRows };
 }
 
 function addInvalidCsvRowWarning(
-  warnings: NonNullable<ParseCsvResult["warnings"]>,
+  warnings: CsvParseWarning[],
   rowNumber: number
 ): void {
   warnings.push({ row: rowNumber, code: "invalid_csv_row" });
@@ -116,6 +103,27 @@ function addInvalidCsvRowWarning(
 
 function isValidInputRow(columns: string[] | null): columns is string[] {
   return columns !== null && columns.length >= INPUT_COLUMN_COUNT;
+}
+
+function parseInputDataRow(row: string): CsvReceiptRow | null {
+  const columns = parseCsvLine(row);
+  if (!isValidInputRow(columns)) return null;
+
+  const receipt_id = columns[0] ?? "";
+  const merchantRaw = columns[1] ?? "";
+  const purchasedAt = columns.at(-1) ?? "";
+  const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(columns.slice(2, -1));
+
+  return {
+    receipt_id,
+    merchantRaw,
+    items: itemsRaw
+      .split("|")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+    totalAmount: parseTotalAmount(totalAmountRaw),
+    purchasedAt
+  };
 }
 
 function parseCsvLine(line: string): string[] | null {
