@@ -63,8 +63,7 @@ export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
 export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult {
   const lines = csvText
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .filter((line) => line.trim().length > 0);
 
   if (lines.length === 0) return { rows: [] };
 

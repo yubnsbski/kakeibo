@@ -169,4 +169,16 @@ describe("inputAutomation", () => {
     expect(result.rows[0].receipt_id).toBe("r001");
     expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
   });
+
+  test("先頭末尾スペースを含む店舗名は保持される", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,  セブンイレブン  ,おにぎり,450,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].merchantRaw).toBe("  セブンイレブン  ");
+  });
+
 });
