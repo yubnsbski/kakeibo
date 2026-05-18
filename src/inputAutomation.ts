@@ -75,12 +75,12 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
     return { rows: [], error: "invalid_header" };
   }
 
-  const warnings: ParseCsvResult["warnings"] = [];
+  const warnings: NonNullable<ParseCsvResult["warnings"]> = [];
   const parsedRows = rows.flatMap((row, index) => {
     const rowNumber = index + 2;
     const columns = parseCsvLine(row);
-    if (!columns || columns.length < INPUT_COLUMN_COUNT) {
-      warnings.push({ row: rowNumber, code: "invalid_csv_row" });
+    if (!isValidInputRow(columns)) {
+      addInvalidCsvRowWarning(warnings, rowNumber);
       return [];
     }
     const receipt_id = columns[0] ?? "";
@@ -103,6 +103,16 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
   return warnings.length > 0 ? { rows: parsedRows, warnings } : { rows: parsedRows };
 }
 
+function addInvalidCsvRowWarning(
+  warnings: NonNullable<ParseCsvResult["warnings"]>,
+  rowNumber: number
+): void {
+  warnings.push({ row: rowNumber, code: "invalid_csv_row" });
+}
+
+function isValidInputRow(columns: string[] | null): columns is string[] {
+  return columns !== null && columns.length >= INPUT_COLUMN_COUNT;
+}
 
 function parseCsvLine(line: string): string[] | null {
   const values: string[] = [];
