@@ -1,4 +1,4 @@
-"""FastAPI entry point — C3 (CSV + summary)."""
+"""FastAPI entry point."""
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import create_db_and_tables
-from .routers import categories, csv_import, overrides, receipts, summary, transactions
+from .routers import categories, overrides, receipts, transactions
 
 
 @asynccontextmanager
@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="kakeibo API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="kakeibo API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,8 +36,6 @@ app.include_router(receipts.router)
 app.include_router(transactions.router)
 app.include_router(overrides.router)
 app.include_router(categories.router)
-app.include_router(csv_import.router)
-app.include_router(summary.router)
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 if _STATIC_DIR.exists():
