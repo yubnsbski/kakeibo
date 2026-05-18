@@ -16,11 +16,6 @@ export type ReceiptInput = {
   userCategoryOverrides?: Partial<Record<string, Category>>;
 };
 
-export type CategoryScore = {
-  category: Category;
-  score: number;
-};
-
 export type ClassificationResult = {
   merchantNormalized: string;
   category: Category | null;
@@ -28,5 +23,4 @@ export type ClassificationResult = {
   needsReview: boolean;
   reason: string;
   reasons: string[];
-  scores: CategoryScore[];
 };
