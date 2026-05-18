@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   exportAutomatedClassificationCsv,
   parseReceiptCsv,
+  parseReceiptCsvWithDiagnostics,
   runClassification,
   runClassificationFromCsvRows,
   validateCsvRowInput
@@ -92,5 +93,80 @@ describe("inputAutomation", () => {
     );
     expect(outCsv).toContain("r001");
     expect(outCsv).toContain("食費");
+  });
+
+  test("CSVヘッダー不正でも例外を投げず空配列を返す", () => {
+    const invalidHeaderCsv = [
+      "id,merchant,items,total,date",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16"
+    ].join("\n");
+
+    expect(() => parseReceiptCsv(invalidHeaderCsv)).not.toThrow();
+    expect(parseReceiptCsv(invalidHeaderCsv)).toEqual([]);
+    expect(parseReceiptCsvWithDiagnostics(invalidHeaderCsv).error).toBe("invalid_header");
+  });
+
+  test("CSVヘッダーのBOM/空白/大文字小文字ゆれを許容する", () => {
+    const csv = [
+      "\uFEFF receipt_id, merchantRaw, items, totalAmount, purchasedAt ",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].merchantRaw).toBe("セブンイレブン");
+  });
+
+  test("金額列は通貨記号・桁区切り・全角数字を含んでも数値化される", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり,¥1,280,2026-05-16",
+      "r002,ローソン,牛乳,￥２,０００,2026-05-16",
+      "r003,ファミマ,パン,\t 980 ,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows[0].totalAmount).toBe(1280);
+    expect(rows[1].totalAmount).toBe(2000);
+    expect(rows[2].totalAmount).toBe(980);
+  });
+
+  test("CSVの引用符つきカンマを含む列を正しく解釈する", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,\"イオン,新宿店\",\"サラダ,チキン|牛乳\",\"1,280\",2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].merchantRaw).toBe("イオン,新宿店");
+    expect(rows[0].items).toEqual(["サラダ,チキン", "牛乳"]);
+    expect(rows[0].totalAmount).toBe(1280);
+  });
+
+  test("クオート不正の行はスキップしwarningsを返す", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16",
+      "r002,\"Amazon,イヤホン|ケーブル,3980,2026-05-16"
+    ].join("\n");
+
+    const result = parseReceiptCsvWithDiagnostics(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].receipt_id).toBe("r001");
+    expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
+  });
+
+  test("フィールド途中の不正クオート行はスキップしwarningsを返す", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16",
+      "r002,Ama\"zon,イヤホン,3980,2026-05-16"
+    ].join("\n");
+
+    const result = parseReceiptCsvWithDiagnostics(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].receipt_id).toBe("r001");
+    expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
   });
 });
