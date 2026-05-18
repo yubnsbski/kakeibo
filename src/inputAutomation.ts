@@ -44,13 +44,16 @@ export type ParseCsvResult = {
   warnings?: CsvParseWarning[];
 };
 
-type CsvParseWarning = {
+export type CsvParseWarning = {
   row: number;
   code: "invalid_csv_row";
 };
 
 const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
 const INPUT_COLUMN_COUNT = 5;
+const RECEIPT_ID_COLUMN_INDEX = 0;
+const MERCHANT_COLUMN_INDEX = 1;
+const PURCHASED_AT_COLUMN_INDEX = -1;
 const NORMALIZED_INPUT_HEADER = normalizeHeader(INPUT_HEADER);
 
 const OUTPUT_HEADER =
@@ -109,9 +112,9 @@ function parseInputDataRow(row: string): CsvReceiptRow | null {
   const columns = parseCsvLine(row);
   if (!isValidInputRow(columns)) return null;
 
-  const receipt_id = columns[0] ?? "";
-  const merchantRaw = columns[1] ?? "";
-  const purchasedAt = columns.at(-1) ?? "";
+  const receipt_id = columns[RECEIPT_ID_COLUMN_INDEX] ?? "";
+  const merchantRaw = columns[MERCHANT_COLUMN_INDEX] ?? "";
+  const purchasedAt = columns.at(PURCHASED_AT_COLUMN_INDEX) ?? "";
   const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(columns.slice(2, -1));
 
   return {
