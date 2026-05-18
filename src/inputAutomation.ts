@@ -47,6 +47,9 @@ export type ParseCsvResult = {
   }>;
 };
 
+const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
+const INPUT_COLUMN_COUNT = 5;
+
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
 
@@ -68,16 +71,16 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
   if (lines.length === 0) return { rows: [] };
 
   const [header, ...rows] = lines;
-  const expectedHeader = normalizeHeader("receipt_id,merchantRaw,items,totalAmount,purchasedAt");
-  if (normalizeHeader(header) !== expectedHeader) {
+  if (normalizeHeader(header) !== normalizeHeader(INPUT_HEADER)) {
     return { rows: [], error: "invalid_header" };
   }
 
   const warnings: ParseCsvResult["warnings"] = [];
   const parsedRows = rows.flatMap((row, index) => {
+    const rowNumber = index + 2;
     const columns = parseCsvLine(row);
-    if (!columns) {
-      warnings.push({ row: index + 2, code: "invalid_csv_row" });
+    if (!columns || columns.length < INPUT_COLUMN_COUNT) {
+      warnings.push({ row: rowNumber, code: "invalid_csv_row" });
       return [];
     }
     const receipt_id = columns[0] ?? "";

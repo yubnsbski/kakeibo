@@ -170,6 +170,20 @@ describe("inputAutomation", () => {
     expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
   });
 
+
+  test("列不足の行はスキップしwarningsを返す", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16",
+      "r002,ローソン,牛乳,120"
+    ].join("\n");
+
+    const result = parseReceiptCsvWithDiagnostics(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].receipt_id).toBe("r001");
+    expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
+  });
+
   test("先頭末尾スペースを含む店舗名は保持される", () => {
     const csv = [
       "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
