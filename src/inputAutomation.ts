@@ -38,6 +38,11 @@ export type RunClassificationResult = {
   message: string;
 };
 
+export type ParseCsvResult = {
+  rows: CsvReceiptRow[];
+  error?: "invalid_header";
+};
+
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
 
@@ -48,20 +53,24 @@ const VALIDATION_MESSAGES: Record<InputValidationErrorCode, string> = {
 };
 
 export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
+  return parseReceiptCsvWithDiagnostics(csvText).rows;
+}
+
+export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult {
   const lines = csvText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  if (lines.length === 0) return [];
+  if (lines.length === 0) return { rows: [] };
 
   const [header, ...rows] = lines;
-  const expectedHeader = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
-  if (header !== expectedHeader) {
-    throw new Error(`invalid csv header: expected '${expectedHeader}'`);
+  const expectedHeader = normalizeHeader("receipt_id,merchantRaw,items,totalAmount,purchasedAt");
+  if (normalizeHeader(header) !== expectedHeader) {
+    return { rows: [], error: "invalid_header" };
   }
 
-  return rows.map((row) => {
+  const parsedRows = rows.map((row) => {
     const [receipt_id = "", merchantRaw = "", itemsRaw = "", totalAmountRaw = "", purchasedAt = ""] =
       row.split(",");
 
@@ -76,6 +85,12 @@ export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
       purchasedAt
     };
   });
+
+  return { rows: parsedRows };
+}
+
+function normalizeHeader(header: string): string {
+  return header.replace(/^\uFEFF/, "").replace(/\s+/g, "").toLowerCase();
 }
 
 export function validateCsvRowInput(row: CsvReceiptRow): InputValidationErrorCode | null {
