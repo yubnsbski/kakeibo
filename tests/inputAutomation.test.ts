@@ -181,4 +181,33 @@ describe("inputAutomation", () => {
     expect(rows[0].merchantRaw).toBe("  セブンイレブン  ");
   });
 
+
+  test("金額が空や非数値の場合はNaNとなり入力エラー扱いになる", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり,,2026-05-16",
+      "r002,ローソン,牛乳,abc,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(Number.isNaN(rows[0].totalAmount)).toBe(true);
+    expect(Number.isNaN(rows[1].totalAmount)).toBe(true);
+
+    const result = runClassificationFromCsvRows(rows);
+    expect(result[0].validation_error).toBe("invalid_total_amount");
+    expect(result[1].validation_error).toBe("invalid_total_amount");
+  });
+
+  test("itemsにカンマがありamountが末尾列に分割されても正しく復元する", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,イオン,サラダ,チキン|牛乳,1,280,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].items).toEqual(["サラダ,チキン", "牛乳"]);
+    expect(rows[0].totalAmount).toBe(1280);
+  });
+
 });

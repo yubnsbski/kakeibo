@@ -154,12 +154,21 @@ function normalizeHeader(header: string): string {
   return header.replace(/^\uFEFF/, "").replace(/\s+/g, "").toLowerCase();
 }
 
+
+function isLikelyAmountRaw(raw: string): boolean {
+  const normalized = toHalfWidth(raw).trim();
+  if (normalized.length === 0) return false;
+  return /^[¥￥]?[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?$/.test(normalized)
+    || /^[¥￥]?[-+]?\d+(?:\.\d+)?$/.test(normalized);
+}
+
 function parseTotalAmount(raw: string): number {
   const normalized = toHalfWidth(raw)
     .replace(/[¥￥]/g, "")
     .replace(/,/g, "")
     .trim();
 
+  if (!/^[-+]?\d+(?:\.\d+)?$/.test(normalized)) return Number.NaN;
   return Number(normalized);
 }
 
@@ -169,6 +178,7 @@ function splitItemsAndAmount(columns: string[]): { itemsRaw: string; totalAmount
 
   for (let amountStart = 1; amountStart < columns.length; amountStart += 1) {
     const amountCandidate = columns.slice(amountStart).join(",");
+    if (!isLikelyAmountRaw(amountCandidate)) continue;
     if (Number.isFinite(parseTotalAmount(amountCandidate))) {
       return {
         itemsRaw: columns.slice(0, amountStart).join(","),
