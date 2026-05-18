@@ -38,6 +38,11 @@ export type RunClassificationResult = {
   message: string;
 };
 
+export type ParseCsvResult = {
+  rows: CsvReceiptRow[];
+  error?: "invalid_header";
+};
+
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
 
@@ -48,22 +53,29 @@ const VALIDATION_MESSAGES: Record<InputValidationErrorCode, string> = {
 };
 
 export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
+  return parseReceiptCsvWithDiagnostics(csvText).rows;
+}
+
+export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult {
   const lines = csvText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  if (lines.length === 0) return [];
+  if (lines.length === 0) return { rows: [] };
 
   const [header, ...rows] = lines;
-  const expectedHeader = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
-  if (header !== expectedHeader) {
-    throw new Error(`invalid csv header: expected '${expectedHeader}'`);
+  const expectedHeader = normalizeHeader("receipt_id,merchantRaw,items,totalAmount,purchasedAt");
+  if (normalizeHeader(header) !== expectedHeader) {
+    return { rows: [], error: "invalid_header" };
   }
 
-  return rows.map((row) => {
-    const [receipt_id = "", merchantRaw = "", itemsRaw = "", totalAmountRaw = "", purchasedAt = ""] =
-      row.split(",");
+  const parsedRows = rows.map((row) => {
+    const columns = row.split(",");
+    const receipt_id = columns[0] ?? "";
+    const merchantRaw = columns[1] ?? "";
+    const purchasedAt = columns.at(-1) ?? "";
+    const { itemsRaw, totalAmountRaw } = splitItemsAndAmount(columns.slice(2, -1));
 
     return {
       receipt_id,
@@ -72,10 +84,51 @@ export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
         .split("|")
         .map((item) => item.trim())
         .filter((item) => item.length > 0),
-      totalAmount: Number(totalAmountRaw),
+      totalAmount: parseTotalAmount(totalAmountRaw),
       purchasedAt
     };
   });
+
+  return { rows: parsedRows };
+}
+
+function normalizeHeader(header: string): string {
+  return header.replace(/^\uFEFF/, "").replace(/\s+/g, "").toLowerCase();
+}
+
+function parseTotalAmount(raw: string): number {
+  const normalized = toHalfWidth(raw)
+    .replace(/[¥￥]/g, "")
+    .replace(/,/g, "")
+    .trim();
+
+  return Number(normalized);
+}
+
+function splitItemsAndAmount(columns: string[]): { itemsRaw: string; totalAmountRaw: string } {
+  if (columns.length === 0) return { itemsRaw: "", totalAmountRaw: "" };
+  if (columns.length === 1) return { itemsRaw: "", totalAmountRaw: columns[0] ?? "" };
+
+  for (let amountStart = 1; amountStart < columns.length; amountStart += 1) {
+    const amountCandidate = columns.slice(amountStart).join(",");
+    if (Number.isFinite(parseTotalAmount(amountCandidate))) {
+      return {
+        itemsRaw: columns.slice(0, amountStart).join(","),
+        totalAmountRaw: amountCandidate
+      };
+    }
+  }
+
+  return {
+    itemsRaw: columns.slice(0, -1).join(","),
+    totalAmountRaw: columns.at(-1) ?? ""
+  };
+}
+
+function toHalfWidth(text: string): string {
+  return text.replace(/[！-～]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0xFEE0)
+  ).replace(/　/g, " ");
 }
 
 export function validateCsvRowInput(row: CsvReceiptRow): InputValidationErrorCode | null {
