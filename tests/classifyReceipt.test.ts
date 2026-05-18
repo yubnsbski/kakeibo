@@ -11,6 +11,7 @@ describe("classifyReceipt", () => {
 
     expect(result.category).toBe("食費");
     expect(result.needsReview).toBe(false);
+    expect(result.confidence).toBe(0.92);
     expect(result.reasons).toContain("merchant_rule: セブンイレブン");
     expect(result.screeningLabel).toBe("recordable");
   });
@@ -40,6 +41,21 @@ describe("classifyReceipt", () => {
     expect(result.reason).toBe("user_override: 通信");
   });
 
+
+
+  test("無効なユーザー修正カテゴリは無視して通常判定する", () => {
+    const result = classifyReceipt({
+      merchantRaw: "Amazon.co.jp",
+      items: [],
+      userCategoryOverrides: { Amazon: "無効カテゴリ" as never },
+      totalAmount: 3000
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
+  });
+
   test("店舗名ルールがない場合は明細キーワードで分類する", () => {
     const result = classifyReceipt({
       merchantRaw: "不明店舗",
@@ -49,6 +65,7 @@ describe("classifyReceipt", () => {
 
     expect(result.category).toBe("交通");
     expect(result.needsReview).toBe(false);
+    expect(result.confidence).toBe(0.78);
     expect(result.reasons).toEqual(["item_keyword: ガソリン"]);
   });
 
@@ -75,6 +92,18 @@ describe("classifyReceipt", () => {
     expect(result.category).toBeNull();
     expect(result.needsReview).toBe(true);
     expect(result.reason).toBe("ambiguous merchant requires manual category");
+  });
+
+  test("ドン・キホーテ表記ゆれは危険店舗として明細なし要確認", () => {
+    const result = classifyReceipt({
+      merchantRaw: "ドン・キホーテ 新宿店",
+      items: ["   "],
+      totalAmount: 1980
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
   });
 
   test("分類ルールがなければ要確認", () => {

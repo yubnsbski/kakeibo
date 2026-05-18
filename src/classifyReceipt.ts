@@ -2,9 +2,16 @@ import { ambiguousMerchants, itemKeywordRules, merchantRules } from "./rules";
 import { normalizeMerchant } from "./normalizeMerchant";
 import type { Category, ClassificationResult, ReceiptInput } from "./types";
 
-const AUTO_CONFIDENCE = 0.9;
-const MANUAL_REVIEW_CONFIDENCE = 0.4;
+const MERCHANT_RULE_CONFIDENCE = 0.92;
+const ITEM_RULE_CONFIDENCE = 0.78;
+const MANUAL_REVIEW_CONFIDENCE = 0.35;
 const REVIEW_CONFIDENCE = 0;
+
+const categories: Category[] = ["食費", "日用品", "交通", "医療", "通信", "娯楽", "教育", "その他"];
+
+function isCategory(value: unknown): value is Category {
+  return typeof value === "string" && categories.includes(value as Category);
+}
 
 function findUserOverrideCategory(
   merchantNormalized: string,
@@ -14,8 +21,8 @@ function findUserOverrideCategory(
 
   for (const [merchant, category] of Object.entries(userCategoryOverrides)) {
     const normalizedKey = normalizeMerchant(merchant);
-    if (normalizedKey && merchantNormalized.includes(normalizedKey)) {
-      return category as Category;
+    if (normalizedKey && merchantNormalized.includes(normalizedKey) && isCategory(category)) {
+      return category;
     }
   }
 
@@ -33,8 +40,11 @@ function matchMerchantRule(merchantNormalized: string): { category: Category; re
 
 function matchItemRule(items: string[]): { category: Category; reason: string } | null {
   for (const item of items) {
+    const normalizedItem = item.trim();
+    if (!normalizedItem) continue;
+
     for (const [keyword, category] of Object.entries(itemKeywordRules)) {
-      if (item.includes(keyword)) {
+      if (normalizedItem.includes(keyword)) {
         return { category, reason: `item_keyword: ${keyword}` };
       }
     }
@@ -44,7 +54,7 @@ function matchItemRule(items: string[]): { category: Category; reason: string } 
 
 export function classifyReceipt(input: ReceiptInput): ClassificationResult {
   const merchantNormalized = normalizeMerchant(input.merchantRaw);
-  const items = input.items ?? [];
+  const items = (input.items ?? []).filter((item) => item.trim().length > 0);
   const isAmbiguous = ambiguousMerchants.some((merchant) => merchantNormalized.includes(merchant));
 
   const override = findUserOverrideCategory(merchantNormalized, input.userCategoryOverrides);
@@ -103,7 +113,7 @@ export function classifyReceipt(input: ReceiptInput): ClassificationResult {
   return {
     merchantNormalized,
     category: match.category,
-    confidence: AUTO_CONFIDENCE,
+    confidence: merchantMatch ? MERCHANT_RULE_CONFIDENCE : ITEM_RULE_CONFIDENCE,
     needsReview: false,
     reason: `rule_match: ${match.category}`,
     reasons: [match.reason],
