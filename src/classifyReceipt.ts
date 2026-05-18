@@ -31,6 +31,10 @@ function matchMerchantRule(merchantNormalized: string): { category: Category; re
   return null;
 }
 
+function sanitizeItems(items: string[] | undefined): string[] {
+  return (items ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
 function matchItemRule(items: string[]): { category: Category; reason: string } | null {
   for (const item of items) {
     for (const [keyword, category] of Object.entries(itemKeywordRules)) {
@@ -44,7 +48,7 @@ function matchItemRule(items: string[]): { category: Category; reason: string } 
 
 export function classifyReceipt(input: ReceiptInput): ClassificationResult {
   const merchantNormalized = normalizeMerchant(input.merchantRaw);
-  const items = input.items ?? [];
+  const items = sanitizeItems(input.items);
   const isAmbiguous = ambiguousMerchants.some((merchant) => merchantNormalized.includes(merchant));
 
   const override = findUserOverrideCategory(merchantNormalized, input.userCategoryOverrides);

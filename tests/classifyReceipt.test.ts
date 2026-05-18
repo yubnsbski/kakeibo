@@ -77,6 +77,84 @@ describe("classifyReceipt", () => {
     expect(result.reason).toBe("ambiguous merchant requires manual category");
   });
 
+
+  test("confidenceは自動分類0.9・曖昧明細あり0.4・要確認0を返す", () => {
+    const auto = classifyReceipt({
+      merchantRaw: "セブンイレブン 渋谷店",
+      items: ["牛乳"],
+      totalAmount: 300
+    });
+    const ambiguous = classifyReceipt({
+      merchantRaw: "Amazon.co.jp",
+      items: ["イヤホン"],
+      totalAmount: 3000
+    });
+    const noMatch = classifyReceipt({
+      merchantRaw: "未知の店舗",
+      items: [""],
+      totalAmount: 1000
+    });
+
+    expect(auto.confidence).toBe(0.9);
+    expect(ambiguous.confidence).toBe(0.4);
+    expect(noMatch.confidence).toBe(0);
+  });
+
+  test("明細の前後空白は除去してキーワード判定する", () => {
+    const result = classifyReceipt({
+      merchantRaw: "不明店舗",
+      items: ["  ガソリン  ", "   "],
+      totalAmount: 3000
+    });
+
+    expect(result.category).toBe("交通");
+    expect(result.needsReview).toBe(false);
+    expect(result.reasons).toEqual(["item_keyword: ガソリン"]);
+  });
+
+  test("曖昧店舗で空白のみ明細は明細なしとして要確認にする", () => {
+    const result = classifyReceipt({
+      merchantRaw: "Amazon.co.jp",
+      items: ["   ", "\t"],
+      totalAmount: 3000
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.confidence).toBe(0);
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
+  });
+
+
+  test("曖昧店舗の表記ゆれ(ドン・キホーテ)も要確認にする", () => {
+    const result = classifyReceipt({
+      merchantRaw: "ドン・キホーテ 新宿店",
+      items: ["洗剤"],
+      totalAmount: 1200
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.confidence).toBe(0.4);
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["item_keyword: 洗剤", "ambiguous_merchant_with_items"]);
+  });
+
+  test("reasonsは単一ルール一致時に1件のみ返す", () => {
+    const merchantRule = classifyReceipt({
+      merchantRaw: "ローソン 渋谷",
+      items: ["映画"],
+      totalAmount: 900
+    });
+    const itemRule = classifyReceipt({
+      merchantRaw: "不明店舗",
+      items: ["映画"],
+      totalAmount: 1800
+    });
+
+    expect(merchantRule.reasons).toEqual(["merchant_rule: ローソン"]);
+    expect(itemRule.reasons).toEqual(["item_keyword: 映画"]);
+  });
+
   test("分類ルールがなければ要確認", () => {
     const result = classifyReceipt({
       merchantRaw: "未知の店舗",
