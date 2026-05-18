@@ -5,3 +5,6 @@ coverage
 .env.*
 .DS_Store
 node_modules
+
+# Local backup snapshots (do not commit; managed via scripts/)
+backups/
