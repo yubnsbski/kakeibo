@@ -18,6 +18,7 @@ export function EditView({ tx, onClose, onSaved }: Props) {
   const [amount, setAmount] = useState(String(tx.amount));
   const [purchasedAt, setPurchasedAt] = useState(tx.purchased_at);
   const [memo, setMemo] = useState(tx.memo || "");
+  const [txType, setTxType] = useState<string>(tx.tx_type || "expense");
   const [needsReview, setNeedsReview] = useState(tx.needs_review);
   const [registerOverride, setRegisterOverride] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -106,6 +107,7 @@ export function EditView({ tx, onClose, onSaved }: Props) {
         memo: memo || null,
         needs_review: needsReview,
         status: "user_confirmed",
+        tx_type: txType,
       });
       if (registerOverride && category && merchantNormalized) {
         await createOverride(merchantNormalized, category);
@@ -120,6 +122,11 @@ export function EditView({ tx, onClose, onSaved }: Props) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>取引編集 (ID: {tx.id})</h3>
         <div className="form-grid">
+          <label>種別</label>
+          <select value={txType} onChange={(e) => setTxType(e.target.value)}>
+            <option value="expense">支出</option>
+            <option value="income">収入</option>
+          </select>
           <label>日付</label>
           <input type="date" value={purchasedAt}
                  onChange={(e) => setPurchasedAt(e.target.value)} />

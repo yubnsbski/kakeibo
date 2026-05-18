@@ -13,13 +13,16 @@ export const DEFAULT_TAX_RATE: Record<Category, number> = {
 };
 
 export interface CategoryMaster {
-  name: Category;
+  name: string;
   description: string;
   tax_rate: number;
   sort_order: number;
+  is_income: boolean;
 }
 
 export type TxStatus = "auto_saved" | "user_confirmed" | "manually_added";
+
+export type TxKind = "expense" | "income";
 
 export interface TransactionItem {
   id: number;
@@ -47,6 +50,7 @@ export interface Transaction {
   memo: string | null;
   receipt_image_id: number | null;
   status: TxStatus;
+  tx_type: TxKind;
   ocr_raw_text: string | null;
   created_at: string;
   updated_at: string;
