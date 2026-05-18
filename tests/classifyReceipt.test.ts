@@ -112,6 +112,19 @@ describe("classifyReceipt", () => {
     expect(result.reasons).toEqual(["item_keyword: ガソリン"]);
   });
 
+  test("曖昧店舗で空白のみ明細は明細なしとして要確認にする", () => {
+    const result = classifyReceipt({
+      merchantRaw: "Amazon.co.jp",
+      items: ["   ", "\t"],
+      totalAmount: 3000
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.confidence).toBe(0);
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
+  });
+
   test("分類ルールがなければ要確認", () => {
     const result = classifyReceipt({
       merchantRaw: "未知の店舗",
