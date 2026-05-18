@@ -46,11 +46,13 @@ export type ParseCsvResult = {
 
 export type CsvParseWarning = {
   row: number;
-  code: "invalid_csv_row";
+  code: typeof INVALID_CSV_ROW_WARNING_CODE;
 };
 
 const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
 const INPUT_COLUMN_COUNT = 5;
+const DATA_ROW_START_NUMBER = 2;
+const INVALID_CSV_ROW_WARNING_CODE = "invalid_csv_row";
 const RECEIPT_ID_COLUMN_INDEX = 0;
 const MERCHANT_COLUMN_INDEX = 1;
 const ITEMS_START_COLUMN_INDEX = 2;
@@ -85,15 +87,17 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
   const warnings: NonNullable<ParseCsvResult["warnings"]> = [];
   const parsedRows: CsvReceiptRow[] = [];
 
-  rows.forEach((row, index) => {
-    const rowNumber = index + 2;
+  let rowNumber = DATA_ROW_START_NUMBER;
+  for (const row of rows) {
     const parsedRow = parseInputDataRow(row);
     if (!parsedRow) {
       addInvalidCsvRowWarning(warnings, rowNumber);
-      return;
+      rowNumber += 1;
+      continue;
     }
     parsedRows.push(parsedRow);
-  });
+    rowNumber += 1;
+  }
 
   return warnings.length > 0 ? { rows: parsedRows, warnings } : { rows: parsedRows };
 }
@@ -102,7 +106,7 @@ function addInvalidCsvRowWarning(
   warnings: CsvParseWarning[],
   rowNumber: number
 ): void {
-  warnings.push({ row: rowNumber, code: "invalid_csv_row" });
+  warnings.push({ row: rowNumber, code: INVALID_CSV_ROW_WARNING_CODE });
 }
 
 function isValidInputRow(columns: string[] | null): columns is string[] {
