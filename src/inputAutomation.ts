@@ -44,20 +44,26 @@ export type ParseCsvResult = {
   warnings?: CsvParseWarning[];
 };
 
+const CSV_PARSE_WARNING_CODES = {
+  INVALID_CSV_ROW: "invalid_csv_row"
+} as const;
+
+export type CsvParseWarningCode =
+  typeof CSV_PARSE_WARNING_CODES[keyof typeof CSV_PARSE_WARNING_CODES];
+
 export type CsvParseWarning = {
   row: number;
-  code: typeof INVALID_CSV_ROW_WARNING_CODE;
+  code: CsvParseWarningCode;
 };
 
 type ParsedInputRowResult = {
   row: CsvReceiptRow | null;
-  warningCode?: typeof INVALID_CSV_ROW_WARNING_CODE;
+  warningCode?: CsvParseWarningCode;
 };
 
 const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
 const INPUT_COLUMN_COUNT = 5;
 const DATA_ROW_START_NUMBER = 2;
-const INVALID_CSV_ROW_WARNING_CODE = "invalid_csv_row";
 const RECEIPT_ID_COLUMN_INDEX = 0;
 const MERCHANT_COLUMN_INDEX = 1;
 const ITEMS_START_COLUMN_INDEX = 2;
@@ -124,7 +130,7 @@ function isValidInputRow(columns: string[] | null): columns is string[] {
 function parseInputDataRow(row: string): ParsedInputRowResult {
   const columns = parseCsvLine(row);
   if (!isValidInputRow(columns)) {
-    return { row: null, warningCode: INVALID_CSV_ROW_WARNING_CODE };
+    return { row: null, warningCode: CSV_PARSE_WARNING_CODES.INVALID_CSV_ROW };
   }
 
   const receipt_id = columns[RECEIPT_ID_COLUMN_INDEX] ?? "";

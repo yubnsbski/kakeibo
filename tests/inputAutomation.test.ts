@@ -263,4 +263,17 @@ describe("inputAutomation", () => {
     expect(rows[0].totalAmount).toBe(1280);
   });
 
+  test("CRLF混在かつ列不足行はinvalid_csv_row warningになる", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16",
+      "r002,ローソン,牛乳,120"
+    ].join("\r\n");
+
+    const result = parseReceiptCsvWithDiagnostics(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].receipt_id).toBe("r001");
+    expect(result.warnings).toEqual([{ row: 3, code: "invalid_csv_row" }]);
+  });
+
 });
