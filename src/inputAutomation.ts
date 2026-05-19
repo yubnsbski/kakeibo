@@ -49,6 +49,11 @@ export type CsvParseWarning = {
   code: typeof INVALID_CSV_ROW_WARNING_CODE;
 };
 
+type ParsedInputRowResult = {
+  row: CsvReceiptRow | null;
+  warningCode?: typeof INVALID_CSV_ROW_WARNING_CODE;
+};
+
 const INPUT_HEADER = "receipt_id,merchantRaw,items,totalAmount,purchasedAt";
 const INPUT_COLUMN_COUNT = 5;
 const DATA_ROW_START_NUMBER = 2;
@@ -89,33 +94,38 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
 
   let rowNumber = DATA_ROW_START_NUMBER;
   for (const row of rows) {
-    const parsedRow = parseInputDataRow(row);
-    if (!parsedRow) {
-      addInvalidCsvRowWarning(warnings, rowNumber);
+    const parsedRowResult = parseInputDataRow(row);
+    if (!parsedRowResult.row) {
+      if (parsedRowResult.warningCode) {
+        addCsvParseWarning(warnings, rowNumber, parsedRowResult.warningCode);
+      }
       rowNumber += 1;
       continue;
     }
-    parsedRows.push(parsedRow);
+    parsedRows.push(parsedRowResult.row);
     rowNumber += 1;
   }
 
   return warnings.length > 0 ? { rows: parsedRows, warnings } : { rows: parsedRows };
 }
 
-function addInvalidCsvRowWarning(
+function addCsvParseWarning(
   warnings: CsvParseWarning[],
-  rowNumber: number
+  rowNumber: number,
+  code: CsvParseWarning["code"]
 ): void {
-  warnings.push({ row: rowNumber, code: INVALID_CSV_ROW_WARNING_CODE });
+  warnings.push({ row: rowNumber, code });
 }
 
 function isValidInputRow(columns: string[] | null): columns is string[] {
   return columns !== null && columns.length >= INPUT_COLUMN_COUNT;
 }
 
-function parseInputDataRow(row: string): CsvReceiptRow | null {
+function parseInputDataRow(row: string): ParsedInputRowResult {
   const columns = parseCsvLine(row);
-  if (!isValidInputRow(columns)) return null;
+  if (!isValidInputRow(columns)) {
+    return { row: null, warningCode: INVALID_CSV_ROW_WARNING_CODE };
+  }
 
   const receipt_id = columns[RECEIPT_ID_COLUMN_INDEX] ?? "";
   const merchantRaw = columns[MERCHANT_COLUMN_INDEX] ?? "";
@@ -125,14 +135,16 @@ function parseInputDataRow(row: string): CsvReceiptRow | null {
   );
 
   return {
-    receipt_id,
-    merchantRaw,
-    items: itemsRaw
-      .split("|")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0),
-    totalAmount: parseTotalAmount(totalAmountRaw),
-    purchasedAt
+    row: {
+      receipt_id,
+      merchantRaw,
+      items: itemsRaw
+        .split("|")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+      totalAmount: parseTotalAmount(totalAmountRaw),
+      purchasedAt
+    }
   };
 }
 
@@ -193,13 +205,17 @@ function normalizeHeader(header: string): string {
 
 
 function parseTotalAmount(raw: string): number {
-  const normalized = toHalfWidth(raw)
-    .replace(/[¥￥]/g, "")
-    .replace(/,/g, "")
-    .trim();
+  const normalized = normalizeAmountText(raw);
 
   if (!/^[-+]?\d+(?:\.\d+)?$/.test(normalized)) return Number.NaN;
   return Number(normalized);
+}
+
+function normalizeAmountText(raw: string): string {
+  return toHalfWidth(raw)
+    .replace(/[¥￥]/g, "")
+    .replace(/,/g, "")
+    .trim();
 }
 
 function splitItemsAndAmount(columns: string[]): { itemsRaw: string; totalAmountRaw: string } {

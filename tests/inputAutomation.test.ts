@@ -238,6 +238,19 @@ describe("inputAutomation", () => {
     expect(result[1].validation_error).toBe("invalid_total_amount");
   });
 
+  test("マイナス金額は数値として解釈されるが入力エラー扱いになる", () => {
+    const csv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
+      "r001,セブンイレブン,返金,-120,2026-05-16"
+    ].join("\n");
+
+    const rows = parseReceiptCsv(csv);
+    expect(rows[0].totalAmount).toBe(-120);
+
+    const result = runClassificationFromCsvRows(rows);
+    expect(result[0].validation_error).toBe("invalid_total_amount");
+  });
+
   test("itemsにカンマがありamountが末尾列に分割されても正しく復元する", () => {
     const csv = [
       "receipt_id,merchantRaw,items,totalAmount,purchasedAt",
