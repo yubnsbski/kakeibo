@@ -9,6 +9,7 @@
 - confidence算出
 - needs_review判定
 - unit test
+- 明細キーワード自動抽出（ラベル付き学習データからの統計的マイニング）
 
 ## 今回作らないもの
 - OCR
@@ -17,6 +18,7 @@
 - ログイン
 - UI
 - 外部API接続
+- 学習済みモデルの永続化（rules.ts への自動上書きは禁止、候補出力のみ）
 
 ## 分類ルール
 優先順位:
@@ -45,6 +47,12 @@
 
 ## テスト
 npm test
+
+## 機械学習（明細キーワード自動抽出）
+- 学習データ: `fixtures/training/labeled-items.json`（明細×カテゴリのラベル付き）
+- 抽出ロジック: `src/keywordMiner.ts`（純TypeScript・依存追加なし・文字n-gram統計）
+- 実行: `npm run mine-keywords`（候補をstdout出力するのみ）
+- `src/rules.ts` への反映は人手レビュー後に手動で行う
 
 ## Environment Rules
 
