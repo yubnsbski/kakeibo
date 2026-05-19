@@ -40,9 +40,16 @@ export type RunClassificationResult = {
 
 export type ParseCsvResult = {
   rows: CsvReceiptRow[];
-  error?: "invalid_header";
+  error?: CsvParseErrorCode;
   warnings?: CsvParseWarning[];
 };
+
+const CSV_PARSE_ERROR_CODES = {
+  INVALID_HEADER: "invalid_header"
+} as const;
+
+export type CsvParseErrorCode =
+  typeof CSV_PARSE_ERROR_CODES[keyof typeof CSV_PARSE_ERROR_CODES];
 
 const CSV_PARSE_WARNING_CODES = {
   INVALID_CSV_ROW: "invalid_csv_row"
@@ -92,7 +99,7 @@ export function parseReceiptCsvWithDiagnostics(csvText: string): ParseCsvResult 
 
   const [header, ...rows] = lines;
   if (normalizeHeader(header) !== NORMALIZED_INPUT_HEADER) {
-    return { rows: [], error: "invalid_header" };
+    return { rows: [], error: CSV_PARSE_ERROR_CODES.INVALID_HEADER };
   }
 
   const warnings: NonNullable<ParseCsvResult["warnings"]> = [];

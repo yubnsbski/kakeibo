@@ -106,6 +106,17 @@ describe("inputAutomation", () => {
     expect(parseReceiptCsvWithDiagnostics(invalidHeaderCsv).error).toBe("invalid_header");
   });
 
+  test("CSVヘッダー不正時はdiagnosticsのerrorコードを返す", () => {
+    const invalidHeaderCsv = [
+      "receipt_id,merchantRaw,items,totalAmount,purchasedAt,extra",
+      "r001,セブンイレブン,おにぎり|牛乳,450,2026-05-16"
+    ].join("\n");
+
+    const result = parseReceiptCsvWithDiagnostics(invalidHeaderCsv);
+    expect(result.rows).toEqual([]);
+    expect(result.error).toBe("invalid_header");
+  });
+
   test("CSVヘッダーのBOM/空白/大文字小文字ゆれを許容する", () => {
     const csv = [
       "\uFEFF receipt_id, merchantRaw, items, totalAmount, purchasedAt ",
