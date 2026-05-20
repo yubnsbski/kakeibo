@@ -54,6 +54,17 @@ npm test
 - 実行: `npm run mine-keywords`（候補をstdout出力するのみ）
 - `src/rules.ts` への反映は人手レビュー後に手動で行う
 
+## 評価ハーネス
+- ロジック: `src/evaluate.ts`（receipt単位 / item単位）
+- 実行: `npm run evaluate`
+- 鉱出キーワード適用前後の精度差をレポートする
+- ルール変更時は前後で評価を取り、回帰がないか確認する
+
+## 明細単位分類
+- `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入）
+- `classifyReceiptBreakdown`: レシート明細ごとに分類し isMixed / dominantCategory を返す
+- `allocateAmountsByCategory`: 混在レシートをカテゴリ別金額に按分する
+
 ## Environment Rules
 
 Before implementation:

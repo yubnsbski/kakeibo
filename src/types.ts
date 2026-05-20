@@ -40,3 +40,16 @@ export type ReceiptBreakdown = {
   isMixed: boolean;
   needsReview: boolean;
 };
+
+export type CategoryAllocation = {
+  category: Category | null;
+  amount: number;
+  itemTexts: string[];
+};
+
+export type AmountAllocationResult = {
+  totalAmount: number;
+  allocations: CategoryAllocation[];
+  strategy: "per_item_amounts" | "equal_split";
+  unclassifiedAmount: number;
+};
