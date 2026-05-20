@@ -1,0 +1,74 @@
+[
+  {
+    "source": "familymart_funabashi_kaijin_2026-05-04",
+    "items": [
+      { "text": "ミルクの束縛ミルクCO", "category": "食費" },
+      { "text": "雑誌書籍", "category": "教育" }
+    ]
+  },
+  {
+    "source": "seven_shibuya_breakfast",
+    "items": [
+      { "text": "おにぎり鮭", "category": "食費" },
+      { "text": "おにぎり梅", "category": "食費" },
+      { "text": "牛乳1L", "category": "食費" }
+    ]
+  },
+  {
+    "source": "lawson_lunch",
+    "items": [
+      { "text": "幕の内弁当", "category": "食費" },
+      { "text": "緑茶ペットボトル", "category": "食費" }
+    ]
+  },
+  {
+    "source": "matsukiyo_daily",
+    "items": [
+      { "text": "液体洗剤詰替", "category": "日用品" },
+      { "text": "シャンプー本体", "category": "日用品" },
+      { "text": "歯ブラシ", "category": "日用品" }
+    ]
+  },
+  {
+    "source": "welcia_daily",
+    "items": [
+      { "text": "トイレットペーパー", "category": "日用品" },
+      { "text": "台所洗剤", "category": "日用品" }
+    ]
+  },
+  {
+    "source": "drugstore_medicine",
+    "items": [
+      { "text": "解熱鎮痛薬", "category": "医療" },
+      { "text": "胃腸薬", "category": "医療" }
+    ]
+  },
+  {
+    "source": "eneos_gas",
+    "items": [
+      { "text": "レギュラーガソリン", "category": "交通" }
+    ]
+  },
+  {
+    "source": "bookstore_kinokuniya",
+    "items": [
+      { "text": "技術書籍", "category": "教育" },
+      { "text": "ビジネス書籍", "category": "教育" },
+      { "text": "雑誌月刊", "category": "教育" }
+    ]
+  },
+  {
+    "source": "electronics_yodobashi",
+    "items": [
+      { "text": "USB充電器", "category": "通信" },
+      { "text": "ワイヤレスイヤホン", "category": "通信" }
+    ]
+  },
+  {
+    "source": "cinema_toho",
+    "items": [
+      { "text": "映画チケット", "category": "娯楽" },
+      { "text": "映画パンフレット", "category": "娯楽" }
+    ]
+  }
+]

@@ -1,8 +1,11 @@
 # Danger Points
 
 ## 分類粒度
-現在は店舗単位分類が中心。
-明細単位分類は次フェーズ。
+店舗単位分類: `classifyReceipt`（既存・回帰なし）
+明細単位分類: `classifyReceiptBreakdown` / `classifyItem`
+- 明細単位はキーワード最長一致を採用する
+- `additionalKeywordRules` で実行時にキーワード注入できる（rules.tsは書き換えない）
+- 混在レシート (`isMixed=true`) は needsReview=true となり、家計簿側で按分判断する前提
 
 ## OCR
 OCRは未接続。

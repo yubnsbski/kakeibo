@@ -7,7 +7,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test",
-    "dev": "node --experimental-strip-types src/server.ts"
+    "dev": "node --experimental-strip-types src/server.ts",
+    "mine-keywords": "MINE_KEYWORDS_REPORT=1 vitest run tests/mineKeywordsReport.test.ts --reporter=verbose",
+    "evaluate": "EVALUATE_REPORT=1 vitest run tests/evaluateReport.test.ts --reporter=verbose"
   },
   "keywords": [],
   "author": "",

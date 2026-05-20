@@ -4,3 +4,6 @@ coverage
 .env
 .env.*
 .DS_Store
+package-lock.json
+__pycache__/
+*.pyc

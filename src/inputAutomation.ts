@@ -1,4 +1,6 @@
 import { classifyReceipt } from "./classifyReceipt";
+import { classifyReceiptBreakdown, type BreakdownOptions } from "./classifyReceiptBreakdown";
+import { allocateAmountsByCategory } from "./allocateAmounts";
 import type { Category, ClassificationResult, ReceiptInput } from "./types";
 
 export type CsvReceiptRow = {
@@ -163,6 +165,107 @@ export function runClassificationFromCsvRows(
       purchased_at: row.purchasedAt
     };
   });
+}
+
+export type BreakdownClassificationRow = {
+  receipt_id: string;
+  merchant_normalized: string;
+  category: Category | "REVIEW";
+  item_texts: string;
+  amount: number;
+  is_mixed: "yes" | "no";
+  purchased_at: string;
+  reason: string;
+};
+
+const BREAKDOWN_OUTPUT_HEADER =
+  "receipt_id,merchant_normalized,category,item_texts,amount,is_mixed,purchased_at,reason";
+
+export function runBreakdownClassificationFromCsvRows(
+  rows: CsvReceiptRow[],
+  options: BreakdownOptions = {}
+): BreakdownClassificationRow[] {
+  const output: BreakdownClassificationRow[] = [];
+
+  for (const row of rows) {
+    const validationError = validateCsvRowInput(row);
+    if (validationError) {
+      output.push({
+        receipt_id: row.receipt_id,
+        merchant_normalized: row.merchantRaw,
+        category: "REVIEW",
+        item_texts: row.items.join("|"),
+        amount: Number.isFinite(row.totalAmount) ? row.totalAmount : 0,
+        is_mixed: "no",
+        purchased_at: row.purchasedAt,
+        reason: validationError
+      });
+      continue;
+    }
+
+    const breakdown = classifyReceiptBreakdown(
+      {
+        merchantRaw: row.merchantRaw,
+        items: row.items,
+        totalAmount: row.totalAmount,
+        purchasedAt: row.purchasedAt
+      },
+      options
+    );
+
+    const allocation = allocateAmountsByCategory(breakdown, row.totalAmount);
+    const isMixed: "yes" | "no" = breakdown.isMixed ? "yes" : "no";
+
+    if (allocation.allocations.length === 0) {
+      output.push({
+        receipt_id: row.receipt_id,
+        merchant_normalized: breakdown.merchantNormalized,
+        category: "REVIEW",
+        item_texts: "",
+        amount: row.totalAmount,
+        is_mixed: isMixed,
+        purchased_at: row.purchasedAt,
+        reason: "no_items"
+      });
+      continue;
+    }
+
+    for (const allocationEntry of allocation.allocations) {
+      output.push({
+        receipt_id: row.receipt_id,
+        merchant_normalized: breakdown.merchantNormalized,
+        category: allocationEntry.category ?? "REVIEW",
+        item_texts: allocationEntry.itemTexts.join("|"),
+        amount: allocationEntry.amount,
+        is_mixed: isMixed,
+        purchased_at: row.purchasedAt,
+        reason:
+          allocationEntry.category === null
+            ? "no_keyword_matched"
+            : breakdown.isMixed
+              ? "mixed_receipt_split"
+              : "rule_match"
+      });
+    }
+  }
+
+  return output;
+}
+
+export function exportBreakdownClassificationCsv(rows: BreakdownClassificationRow[]): string {
+  const body = rows.map((row) =>
+    [
+      row.receipt_id,
+      row.merchant_normalized.split(",").join(" "),
+      row.category,
+      row.item_texts.split(",").join(" "),
+      row.amount,
+      row.is_mixed,
+      row.purchased_at,
+      row.reason.split(",").join(" ")
+    ].join(",")
+  );
+  return [BREAKDOWN_OUTPUT_HEADER, ...body].join("\n");
 }
 
 export function exportAutomatedClassificationCsv(rows: AutomatedClassificationRow[]): string {

@@ -87,3 +87,16 @@ CSVヘッダーを次で固定する。
 `items` 列は `|` 区切り（例: `おにぎり|牛乳`）を使う。
 入力不正行は `needs_review=yes` とし、`reason` にエラーコードを入れる。
 エラー表示は利用者向け文言（例: 「店舗名を入力してください」）も併記して運用する。
+
+---
+
+## 6) 内訳出力（混在レシート対応）
+1レシート内に複数カテゴリの明細が混在する場合は、`runBreakdownClassificationFromCsvRows` を使う。
+
+出力CSVヘッダー（固定）:
+`receipt_id,merchant_normalized,category,item_texts,amount,is_mixed,purchased_at,reason`
+
+- 1レシートはカテゴリ別に複数行に展開される（按分後）
+- `is_mixed=yes` は混在検出フラグ
+- per-item金額が分かる場合は `allocateAmountsByCategory` に `perItemAmounts` を渡して正確按分する（パイプライン外で利用）
+- 軽減税率「軽」マーカーが取れる場合は `perItemTaxRateHints` で食費フォールバックを有効化する
