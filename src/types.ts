@@ -26,6 +26,8 @@ export type ClassificationResult = {
   screeningLabel: "recordable" | "needs_review";
 };
 
+export type TaxRateHint = "reduced" | "standard";
+
 export type ItemClassification = {
   text: string;
   category: Category | null;

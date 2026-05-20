@@ -1,15 +1,37 @@
 import { classifyItem, type ClassifyItemOptions } from "./classifyItem";
 import { normalizeMerchant } from "./normalizeMerchant";
-import type { Category, ItemClassification, ReceiptBreakdown, ReceiptInput } from "./types";
+import type {
+  Category,
+  ItemClassification,
+  ReceiptBreakdown,
+  ReceiptInput,
+  TaxRateHint
+} from "./types";
 
-export type BreakdownOptions = ClassifyItemOptions;
+export type BreakdownOptions = Omit<ClassifyItemOptions, "taxRateHint"> & {
+  perItemTaxRateHints?: ReadonlyArray<TaxRateHint | null>;
+};
 
 export function classifyReceiptBreakdown(
   input: ReceiptInput,
   options: BreakdownOptions = {}
 ): ReceiptBreakdown {
   const merchantNormalized = normalizeMerchant(input.merchantRaw);
-  const items = (input.items ?? []).map((text) => classifyItem(text, options));
+  const rawItems = input.items ?? [];
+
+  if (options.perItemTaxRateHints && options.perItemTaxRateHints.length !== rawItems.length) {
+    throw new Error(
+      `perItemTaxRateHints length (${options.perItemTaxRateHints.length}) does not match items length (${rawItems.length})`
+    );
+  }
+
+  const items = rawItems.map((text, index) => {
+    const hint = options.perItemTaxRateHints?.[index] ?? undefined;
+    return classifyItem(text, {
+      additionalKeywordRules: options.additionalKeywordRules,
+      taxRateHint: hint ?? undefined
+    });
+  });
 
   const categoryCounts = new Map<Category, number>();
   for (const item of items) {

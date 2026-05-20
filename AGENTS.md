@@ -61,9 +61,11 @@ npm test
 - ルール変更時は前後で評価を取り、回帰がないか確認する
 
 ## 明細単位分類
-- `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入）
+- `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入 + 税率ヒント）
 - `classifyReceiptBreakdown`: レシート明細ごとに分類し isMixed / dominantCategory を返す
 - `allocateAmountsByCategory`: 混在レシートをカテゴリ別金額に按分する
+- `runBreakdownClassificationFromCsvRows`: CSVバッチ入力をカテゴリ別行に展開
+- 税率ヒント: `perItemTaxRateHints` で「軽」マーカー由来の食費フォールバックを有効化
 
 ## Environment Rules
 

@@ -37,4 +37,23 @@ describe("classifyItem", () => {
     expect(result.category).toBeNull();
     expect(result.reason).toBe("empty_item");
   });
+
+  test("税率ヒントreduced+キーワード未マッチなら食費にフォールバックする", () => {
+    const result = classifyItem("ミルクの束縛ミルクCO", { taxRateHint: "reduced" });
+    expect(result.category).toBe("食費");
+    expect(result.reason).toBe("tax_rate_hint: reduced→食費");
+    expect(result.matchedKeyword).toBeNull();
+  });
+
+  test("キーワード一致が優先され、税率ヒントはフォールバックに留まる", () => {
+    const result = classifyItem("シャンプー詰替", { taxRateHint: "reduced" });
+    expect(result.category).toBe("日用品");
+    expect(result.matchedKeyword).toBe("シャンプー");
+  });
+
+  test("税率ヒントstandardだけではフォールバックしない", () => {
+    const result = classifyItem("謎の物体", { taxRateHint: "standard" });
+    expect(result.category).toBeNull();
+    expect(result.reason).toBe("no_keyword_matched");
+  });
 });

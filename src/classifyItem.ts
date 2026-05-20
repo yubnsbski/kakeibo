@@ -1,8 +1,9 @@
 import { itemKeywordRules } from "./rules";
-import type { Category, ItemClassification } from "./types";
+import type { Category, ItemClassification, TaxRateHint } from "./types";
 
 export type ClassifyItemOptions = {
   additionalKeywordRules?: Partial<Record<string, Category>>;
+  taxRateHint?: TaxRateHint;
 };
 
 export function classifyItem(itemText: string, options: ClassifyItemOptions = {}): ItemClassification {
@@ -29,20 +30,29 @@ export function classifyItem(itemText: string, options: ClassifyItemOptions = {}
     }
   }
 
-  if (bestKeyword === null || bestCategory === null) {
+  if (bestKeyword !== null && bestCategory !== null) {
     return {
       text,
-      category: null,
-      reason: "no_keyword_matched",
+      category: bestCategory,
+      reason: `item_keyword: ${bestKeyword}`,
+      matchedKeyword: bestKeyword
+    };
+  }
+
+  if (options.taxRateHint === "reduced") {
+    return {
+      text,
+      category: "食費",
+      reason: "tax_rate_hint: reduced→食費",
       matchedKeyword: null
     };
   }
 
   return {
     text,
-    category: bestCategory,
-    reason: `item_keyword: ${bestKeyword}`,
-    matchedKeyword: bestKeyword
+    category: null,
+    reason: "no_keyword_matched",
+    matchedKeyword: null
   };
 }
 

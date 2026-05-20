@@ -66,6 +66,32 @@ describe("classifyReceiptBreakdown", () => {
     expect(result.merchantNormalized).toContain("セブンイレブン");
   });
 
+  test("perItemTaxRateHintsで税率を伝搬し、軽減税率の未知明細を食費にフォールバックする", () => {
+    const result = classifyReceiptBreakdown(
+      {
+        merchantRaw: "FamilyMart",
+        items: ["ミルクの束縛ミルクCO", "雑誌書籍"]
+      },
+      {
+        additionalKeywordRules: { 書籍: "教育" },
+        perItemTaxRateHints: ["reduced", "standard"]
+      }
+    );
+
+    expect(result.items[0].category).toBe("食費");
+    expect(result.items[0].reason).toBe("tax_rate_hint: reduced→食費");
+    expect(result.items[1].category).toBe("教育");
+  });
+
+  test("perItemTaxRateHintsの長さがitemsと合わなければエラー", () => {
+    expect(() =>
+      classifyReceiptBreakdown(
+        { merchantRaw: "FamilyMart", items: ["a", "b"] },
+        { perItemTaxRateHints: ["reduced"] }
+      )
+    ).toThrow(/length/);
+  });
+
   test("summarizeItemsByCategoryはカテゴリ別にグルーピングする", () => {
     const breakdown = classifyReceiptBreakdown(
       {
