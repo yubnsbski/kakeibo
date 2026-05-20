@@ -34,5 +34,77 @@
       "category": null,
       "needsReview": true
     }
+  },
+  {
+    "name": "familymart_simple",
+    "input": {
+      "merchantRaw": "ファミリーマート 船橋店",
+      "items": ["おにぎり"],
+      "totalAmount": 150
+    },
+    "expected": {
+      "category": "食費",
+      "needsReview": false
+    }
+  },
+  {
+    "name": "matsukiyo_daily",
+    "input": {
+      "merchantRaw": "マツモトキヨシ 新宿店",
+      "items": ["シャンプー"],
+      "totalAmount": 980
+    },
+    "expected": {
+      "category": "日用品",
+      "needsReview": false
+    }
+  },
+  {
+    "name": "eneos_gas",
+    "input": {
+      "merchantRaw": "ENEOS 池袋SS",
+      "items": ["ガソリン"],
+      "totalAmount": 5400
+    },
+    "expected": {
+      "category": "交通",
+      "needsReview": false
+    }
+  },
+  {
+    "name": "jr_east_commute",
+    "input": {
+      "merchantRaw": "JR東日本 みどりの窓口",
+      "items": ["乗車券"],
+      "totalAmount": 1450
+    },
+    "expected": {
+      "category": "交通",
+      "needsReview": false
+    }
+  },
+  {
+    "name": "rakuten_without_items",
+    "input": {
+      "merchantRaw": "楽天市場",
+      "items": [],
+      "totalAmount": 4200
+    },
+    "expected": {
+      "category": null,
+      "needsReview": true
+    }
+  },
+  {
+    "name": "unknown_merchant_unknown_items",
+    "input": {
+      "merchantRaw": "ABC商店",
+      "items": ["特売品"],
+      "totalAmount": 800
+    },
+    "expected": {
+      "category": null,
+      "needsReview": true
+    }
   }
 ]

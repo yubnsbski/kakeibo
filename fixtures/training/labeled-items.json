@@ -70,5 +70,151 @@
       { "text": "映画チケット", "category": "娯楽" },
       { "text": "映画パンフレット", "category": "娯楽" }
     ]
+  },
+  {
+    "source": "familymart_yokohama_2026-04-12",
+    "items": [
+      { "text": "サンドイッチハム", "category": "食費" },
+      { "text": "コーヒー", "category": "食費" }
+    ]
+  },
+  {
+    "source": "seven_kyobashi_2026-04-20",
+    "items": [
+      { "text": "唐揚げ弁当", "category": "食費" },
+      { "text": "サラダチキン", "category": "食費" },
+      { "text": "おでん大根", "category": "食費" }
+    ]
+  },
+  {
+    "source": "lawson_shinjuku_2026-05-10",
+    "items": [
+      { "text": "肉まん", "category": "食費" },
+      { "text": "アイスコーヒー", "category": "食費" }
+    ]
+  },
+  {
+    "source": "starbucks_shibuya_2026-05-12",
+    "items": [
+      { "text": "カフェラテ", "category": "食費" },
+      { "text": "チョコレートケーキ", "category": "食費" }
+    ]
+  },
+  {
+    "source": "saizeriya_2026-05-15",
+    "items": [
+      { "text": "ミラノ風ドリア", "category": "食費" },
+      { "text": "サラダ", "category": "食費" }
+    ]
+  },
+  {
+    "source": "welcia_kashiwa_2026-04-30",
+    "items": [
+      { "text": "ボディソープ", "category": "日用品" },
+      { "text": "ハンドソープ", "category": "日用品" },
+      { "text": "綿棒", "category": "日用品" }
+    ]
+  },
+  {
+    "source": "tsuruha_2026-05-02",
+    "items": [
+      { "text": "洗濯洗剤", "category": "日用品" },
+      { "text": "柔軟剤", "category": "日用品" },
+      { "text": "ティッシュペーパー", "category": "日用品" }
+    ]
+  },
+  {
+    "source": "kohnan_diy_2026-04-25",
+    "items": [
+      { "text": "電球LED", "category": "日用品" },
+      { "text": "ゴミ袋45L", "category": "日用品" }
+    ]
+  },
+  {
+    "source": "clinic_internal_2026-04-08",
+    "items": [
+      { "text": "風邪薬総合", "category": "医療" },
+      { "text": "湿布薬", "category": "医療" }
+    ]
+  },
+  {
+    "source": "drugstore_skincare_2026-05-01",
+    "items": [
+      { "text": "目薬", "category": "医療" },
+      { "text": "絆創膏", "category": "医療" }
+    ]
+  },
+  {
+    "source": "jr_east_tokyo_2026-05-05",
+    "items": [
+      { "text": "Suicaチャージ", "category": "交通" },
+      { "text": "新幹線指定席", "category": "交通" }
+    ]
+  },
+  {
+    "source": "taxi_tokyo_2026-05-09",
+    "items": [
+      { "text": "タクシー初乗り", "category": "交通" }
+    ]
+  },
+  {
+    "source": "shell_gas_2026-05-11",
+    "items": [
+      { "text": "ハイオクガソリン", "category": "交通" }
+    ]
+  },
+  {
+    "source": "docomo_mobile_2026-05-01",
+    "items": [
+      { "text": "携帯電話料金", "category": "通信" },
+      { "text": "データ通信オプション", "category": "通信" }
+    ]
+  },
+  {
+    "source": "yodobashi_audio_2026-05-13",
+    "items": [
+      { "text": "Bluetoothイヤホン", "category": "通信" },
+      { "text": "ライトニングケーブル", "category": "通信" }
+    ]
+  },
+  {
+    "source": "kinokuniya_2026-05-07",
+    "items": [
+      { "text": "プログラミング書籍", "category": "教育" },
+      { "text": "英語参考書", "category": "教育" }
+    ]
+  },
+  {
+    "source": "amazon_kindle_2026-05-14",
+    "items": [
+      { "text": "電子書籍ノンフィクション", "category": "教育" }
+    ]
+  },
+  {
+    "source": "toho_cinemas_2026-05-06",
+    "items": [
+      { "text": "映画レイトショー", "category": "娯楽" },
+      { "text": "ポップコーン", "category": "娯楽" }
+    ]
+  },
+  {
+    "source": "karaoke_2026-05-08",
+    "items": [
+      { "text": "カラオケ室料", "category": "娯楽" },
+      { "text": "ドリンクバー", "category": "娯楽" }
+    ]
+  },
+  {
+    "source": "round1_2026-05-16",
+    "items": [
+      { "text": "ボウリング1ゲーム", "category": "娯楽" }
+    ]
+  },
+  {
+    "source": "hundred_yen_misc_2026-05-03",
+    "items": [
+      { "text": "電池単三", "category": "その他" },
+      { "text": "祝儀袋", "category": "その他" }
+    ]
   }
 ]
