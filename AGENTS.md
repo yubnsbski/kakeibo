@@ -60,6 +60,12 @@ npm test
 - 鉱出キーワード適用前後の精度差をレポートする
 - ルール変更時は前後で評価を取り、回帰がないか確認する
 
+## フィードバックループ（学習データ取り込み）
+- `toLabeledExamples`: 手動確認済みレビュー結果を学習データ形式に変換
+- `mergeLabeledExamples`: 既存の `labeled-items.json` と source 単位でマージ
+- 自動ファイル書き込みはしない（呼び出し側が JSON.stringify して書く）
+- ループ: needs_review 確認 → ConfirmedItem 化 → merge → mine-keywords → evaluate
+
 ## 明細単位分類
 - `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入 + 税率ヒント）
 - `classifyReceiptBreakdown`: レシート明細ごとに分類し isMixed / dominantCategory を返す
