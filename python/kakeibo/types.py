@@ -38,6 +38,7 @@ class ClassificationResult:
     reason: str
     reasons: list[str]
     screening_label: ScreeningLabel
+    mixed_item_categories: tuple[Category, ...] = ()
 
 
 @dataclass(frozen=True)
