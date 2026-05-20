@@ -66,6 +66,15 @@ npm test
 - 自動ファイル書き込みはしない（呼び出し側が JSON.stringify して書く）
 - ループ: needs_review 確認 → ConfirmedItem 化 → merge → mine-keywords → evaluate
 
+## Python実装
+- 場所: `python/` (TS実装と並行する1:1ミラー)
+- 依存: pure stdlib のみ（unittest）
+- 拡張: `rules.py` に seed lexicon を追加し、明細精度 100% (22/22) 達成
+- テスト: `cd python && python3 -m unittest discover -s tests`
+- CLI: `python3 -m kakeibo.cli mine-keywords` / `python3 -m kakeibo.cli evaluate`
+- 精度ガード: `test_baseline_accuracy_meets_90_percent` が >= 90% を強制
+- fixtures は `python/fixtures` → `../fixtures` の symlink でTS実装と共有
+
 ## 明細単位分類
 - `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入 + 税率ヒント）
 - `classifyReceiptBreakdown`: レシート明細ごとに分類し isMixed / dominantCategory を返す
