@@ -25,3 +25,18 @@ export type ClassificationResult = {
   reasons: string[];
   screeningLabel: "recordable" | "needs_review";
 };
+
+export type ItemClassification = {
+  text: string;
+  category: Category | null;
+  reason: string;
+  matchedKeyword: string | null;
+};
+
+export type ReceiptBreakdown = {
+  merchantNormalized: string;
+  items: ItemClassification[];
+  dominantCategory: Category | null;
+  isMixed: boolean;
+  needsReview: boolean;
+};
