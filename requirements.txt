@@ -1,0 +1,5 @@
+streamlit
+openai
+pillow
+pydantic
+pillow-heif
