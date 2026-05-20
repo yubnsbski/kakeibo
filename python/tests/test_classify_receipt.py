@@ -56,5 +56,54 @@ class ClassifyReceiptTests(unittest.TestCase):
         self.assertEqual(result.reason, "no rule matched")
 
 
+class MixedItemCategoriesTests(unittest.TestCase):
+    def test_family_mart_mixed_items_surfaced(self):
+        result = classify_receipt(
+            ReceiptInput(
+                merchant_raw="ファミリーマート 渋谷店",
+                items=["ミルクの束縛ミルクCO", "雑誌書籍"],
+                total_amount=1500,
+            )
+        )
+        # Merchant rule still decides the headline category.
+        self.assertEqual(result.category, "食費")
+        # But item-level mix is surfaced as an informational signal.
+        self.assertIn("食費", result.mixed_item_categories)
+        self.assertIn("教育", result.mixed_item_categories)
+        self.assertEqual(len(result.mixed_item_categories), 2)
+
+    def test_uniform_receipt_no_mixed_categories(self):
+        result = classify_receipt(
+            ReceiptInput(
+                merchant_raw="ｾﾌﾞﾝ-ｲﾚﾌﾞﾝ 渋谷店",
+                items=["おにぎり", "牛乳"],
+                total_amount=620,
+            )
+        )
+        self.assertEqual(result.category, "食費")
+        self.assertEqual(result.mixed_item_categories, ())
+
+    def test_no_items_no_mixed_categories(self):
+        result = classify_receipt(
+            ReceiptInput(merchant_raw="Amazon.co.jp", total_amount=3000)
+        )
+        self.assertEqual(result.mixed_item_categories, ())
+
+    def test_merchant_rule_still_surfaces_item_mix(self):
+        # マツモトキヨシ resolves to 日用品 via merchant rule, but if items
+        # contain a mix of categories the breakdown should still surface them.
+        result = classify_receipt(
+            ReceiptInput(
+                merchant_raw="マツモトキヨシ 新宿店",
+                items=["シャンプー", "本"],
+                total_amount=2000,
+            )
+        )
+        self.assertEqual(result.category, "日用品")
+        self.assertIn("日用品", result.mixed_item_categories)
+        self.assertIn("教育", result.mixed_item_categories)
+        self.assertEqual(len(result.mixed_item_categories), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
