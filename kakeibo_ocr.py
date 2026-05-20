@@ -1,19 +1,18 @@
-"""kakeibo OCR - Single-file Streamlit + VLM receipt parser.
+"""kakeibo OCR - Single-file Streamlit + Gemini receipt parser.
 
 仕様書（改訂版）に基づく最小実装。
-- OCR本体: OpenAI GPT-4o (Vision) - サイドバーで切替可
+- OCR本体: Google Gemini (Vision)
 - 入力: レシート画像（JPEG/PNG/HEIC）
 - 出力: 構造化 JSON（店名・日時・合計・税・明細・信頼度）
 
 Run:
-    pip install streamlit openai pillow pydantic
-    export OPENAI_API_KEY=sk-...
+    pip install streamlit google-genai pillow pydantic
+    export GEMINI_API_KEY=...
     streamlit run kakeibo_ocr.py
 """
 
 from __future__ import annotations
 
-import base64
 import io
 import json
 import os
@@ -21,9 +20,17 @@ from datetime import datetime
 from typing import Optional
 
 import streamlit as st
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
+
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:
+    pass
 
 
 # ---------- Data models ----------
@@ -73,36 +80,30 @@ def preprocess(image: Image.Image, max_side: int = 2000) -> Image.Image:
     return img
 
 
-def encode_image(image: Image.Image) -> str:
+def image_to_png_bytes(image: Image.Image) -> bytes:
     buf = io.BytesIO()
     image.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    return buf.getvalue()
 
 
 def call_vlm(image: Image.Image, model: str, api_key: str) -> Receipt:
-    client = OpenAI(api_key=api_key)
-    b64 = encode_image(image)
+    client = genai.Client(api_key=api_key)
+    png_bytes = image_to_png_bytes(image)
 
-    response = client.chat.completions.create(
+    response = client.models.generate_content(
         model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "このレシート画像を解析して JSON を返してください。"},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    },
-                ],
-            },
+        contents=[
+            types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
+            "このレシート画像を解析して JSON を返してください。",
         ],
-        response_format={"type": "json_object"},
-        temperature=0.0,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            temperature=0.0,
+        ),
     )
 
-    raw = response.choices[0].message.content or "{}"
+    raw = response.text or "{}"
     data = json.loads(raw)
     return Receipt(**data)
 
@@ -111,17 +112,21 @@ def call_vlm(image: Image.Image, model: str, api_key: str) -> Receipt:
 def main() -> None:
     st.set_page_config(page_title="kakeibo OCR", page_icon="🧾", layout="wide")
     st.title("🧾 kakeibo OCR")
-    st.caption("VLM (GPT-4o) でレシートを解析して家計簿用 JSON を生成します。")
+    st.caption("Gemini Vision でレシートを解析して家計簿用 JSON を生成します。")
 
     with st.sidebar:
         st.header("設定")
         api_key = st.text_input(
-            "OpenAI API Key",
+            "Gemini API Key",
             type="password",
-            value=os.getenv("OPENAI_API_KEY", ""),
-            help="環境変数 OPENAI_API_KEY からも読み込みます。",
+            value=os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", ""),
+            help="環境変数 GEMINI_API_KEY / GOOGLE_API_KEY からも読み込みます。",
         )
-        model = st.selectbox("モデル", ["gpt-4o", "gpt-4o-mini", "gpt-4.1"], index=0)
+        model = st.selectbox(
+            "モデル",
+            ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+            index=0,
+        )
         st.markdown("---")
         st.markdown("**仕様**：2 週間スプリント / Codex 駆動")
 
@@ -150,10 +155,10 @@ def main() -> None:
         if not st.button("解析する", type="primary", use_container_width=True):
             return
         if not api_key:
-            st.error("OpenAI API Key が必要です。")
+            st.error("Gemini API Key が必要です。")
             return
 
-        with st.spinner("VLM に問い合わせ中..."):
+        with st.spinner("Gemini に問い合わせ中..."):
             try:
                 receipt = call_vlm(image, model, api_key)
             except (json.JSONDecodeError, ValidationError) as e:
