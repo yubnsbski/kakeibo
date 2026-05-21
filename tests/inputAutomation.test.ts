@@ -5,10 +5,12 @@ import {
   parseReceiptCsvWithDiagnostics,
   manualTransactionToAllocationInput,
   runClassification,
+  runManualTransactionInput,
   runClassificationFromCsvRows,
   validateManualTransactionInput,
   validateCsvRowInput
 } from "../src/inputAutomation";
+import type { ManualTransactionInput } from "../src/types";
 
 describe("inputAutomation", () => {
   test("CSV入力を自動分類して3ケースを通す（セブン/Amazon明細なし/no rule matched）", () => {
@@ -394,5 +396,105 @@ describe("inputAutomation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("missing_merchant");
+  });
+
+  test("valid expense manual transaction を runManualTransactionInput で処理できる", () => {
+    const result = runManualTransactionInput({
+      type: "expense",
+      merchantRaw: "店舗B",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "商品", amount: 500, category: "日用品" }]
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  test("成功時に allocationInput を返す", () => {
+    const result = runManualTransactionInput({
+      type: "expense",
+      merchantRaw: "店舗B",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "商品", amount: 500, category: "日用品" }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.allocationInput.amount).toBe(500);
+      expect(result.allocationInput.items).toEqual(["商品"]);
+    }
+  });
+
+  test("成功時の needsReview が allocationInput.needsReview と一致する", () => {
+    const result = runManualTransactionInput({
+      type: "expense",
+      merchantRaw: "店舗B",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "商品", amount: 500, category: "日用品" }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.needsReview).toBe(result.allocationInput.needsReview);
+    }
+  });
+
+  test("カテゴリ未指定明細がある場合、成功するが needsReview true になる", () => {
+    const result = runManualTransactionInput({
+      type: "expense",
+      merchantRaw: "店舗B",
+      purchasedAt: "2026-05-18",
+      items: [
+        { name: "商品1", amount: 300, category: "食費" },
+        { name: "商品2", amount: 200 }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.needsReview).toBe(true);
+      expect(result.allocationInput.category).toBe("その他");
+    }
+  });
+
+  test("income は ok false + UNSUPPORTED_TRANSACTION_TYPE になる", () => {
+    const result = runManualTransactionInput({
+      type: "income",
+      merchantRaw: "給与振込",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "給与", amount: 300000, category: "その他" }]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("UNSUPPORTED_TRANSACTION_TYPE");
+  });
+
+  test("validateManualTransactionInput に失敗する入力は ok false になる", () => {
+    const result = runManualTransactionInput({
+      type: "expense",
+      merchantRaw: "",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "商品", amount: 500, category: "日用品" }]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("missing_merchant");
+  });
+
+  test("runManualTransactionInput は manualTransactionToAllocationInput と矛盾しない結果を返す", () => {
+    const input: ManualTransactionInput = {
+      type: "expense",
+      merchantRaw: "店舗B",
+      purchasedAt: "2026-05-18",
+      items: [{ name: "商品", amount: 500, category: "日用品" }]
+    };
+
+    const runResult = runManualTransactionInput(input);
+    const converted = manualTransactionToAllocationInput(input);
+
+    expect(runResult.ok).toBe(converted.ok);
+    if (runResult.ok && converted.ok) {
+      expect(runResult.allocationInput).toEqual(converted.value);
+      expect(runResult.needsReview).toBe(converted.value.needsReview);
+    }
   });
 });

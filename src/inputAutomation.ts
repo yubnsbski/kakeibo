@@ -3,6 +3,7 @@ import type { AllocationInput } from "./walletEngine";
 import type {
   Category,
   ClassificationResult,
+  ManualTransactionRunResult,
   ManualTransactionConversionResult,
   ManualTransactionInput,
   ReceiptInput,
@@ -207,6 +208,20 @@ export function manualTransactionToAllocationInput(
   };
 
   return { ok: true, value: allocationInput };
+}
+
+export function runManualTransactionInput(input: ManualTransactionInput): ManualTransactionRunResult {
+  const converted = manualTransactionToAllocationInput(input);
+  if (!converted.ok) {
+    return { ok: false, error: converted.error };
+  }
+
+  return {
+    ok: true,
+    input,
+    allocationInput: converted.value,
+    needsReview: converted.value.needsReview
+  };
 }
 
 function isValidDateYYYYMMDD(dateText: string): boolean {

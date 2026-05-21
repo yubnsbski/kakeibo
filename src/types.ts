@@ -42,6 +42,29 @@ export type ManualTransactionConversionResult =
       | "invalid_item_category";
   };
 
+type ManualTransactionConversionError =
+  | "UNSUPPORTED_TRANSACTION_TYPE"
+  | "missing_merchant"
+  | "invalid_total_amount"
+  | "invalid_purchased_at"
+  | "invalid_transaction_type"
+  | "missing_items"
+  | "missing_item_name"
+  | "invalid_item_amount"
+  | "invalid_item_category";
+
+export type ManualTransactionRunResult =
+  | {
+    ok: true;
+    input: ManualTransactionInput;
+    allocationInput: AllocationInput;
+    needsReview: boolean;
+  }
+  | {
+    ok: false;
+    error: ManualTransactionConversionError;
+  };
+
 export type ReceiptInput = {
   merchantRaw: string;
   items?: string[];
