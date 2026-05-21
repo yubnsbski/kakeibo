@@ -1,5 +1,13 @@
 import { classifyReceipt } from "./classifyReceipt";
-import type { Category, ClassificationResult, ManualTransactionInput, ReceiptInput, TransactionType } from "./types";
+import type { AllocationInput } from "./walletEngine";
+import type {
+  Category,
+  ClassificationResult,
+  ManualTransactionConversionResult,
+  ManualTransactionInput,
+  ReceiptInput,
+  TransactionType
+} from "./types";
 
 export type CsvReceiptRow = {
   receipt_id: string;
@@ -171,6 +179,34 @@ export function validateManualTransactionInput(input: ManualTransactionInput): I
   }
 
   return null;
+}
+
+export function manualTransactionToAllocationInput(
+  input: ManualTransactionInput
+): ManualTransactionConversionResult {
+  const validationError = validateManualTransactionInput(input);
+  if (validationError) return { ok: false, error: validationError };
+  if (input.type === "income") return { ok: false, error: "UNSUPPORTED_TRANSACTION_TYPE" };
+
+  const amount = input.items.reduce((sum, item) => sum + item.amount, 0);
+  const categorized = input.items.filter((item) => item.category !== undefined);
+  const hasUncategorizedItem = categorized.length !== input.items.length;
+  const categorySet = new Set(categorized.map((item) => item.category!));
+
+  const hasSingleCategory = !hasUncategorizedItem && categorySet.size === 1;
+  const category: Category = hasSingleCategory ? categorized[0].category! : "その他";
+  const needsReview = !hasSingleCategory;
+
+  const allocationInput: AllocationInput = {
+    id: `manual-${input.purchasedAt}-${input.merchantRaw.trim()}`,
+    amount,
+    category,
+    needsReview,
+    items: input.items.map((item) => item.name),
+    purchasedAt: input.purchasedAt
+  };
+
+  return { ok: true, value: allocationInput };
 }
 
 function isValidDateYYYYMMDD(dateText: string): boolean {

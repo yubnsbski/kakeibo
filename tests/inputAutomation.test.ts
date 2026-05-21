@@ -3,6 +3,7 @@ import {
   exportAutomatedClassificationCsv,
   parseReceiptCsv,
   parseReceiptCsvWithDiagnostics,
+  manualTransactionToAllocationInput,
   runClassification,
   runClassificationFromCsvRows,
   validateManualTransactionInput,
@@ -274,5 +275,124 @@ describe("inputAutomation", () => {
         items: [{ name: "商品", amount: 100, category: "日用品" }]
       })
     ).toBeNull();
+  });
+
+  test("valid expense manual transaction を AllocationInput に変換できる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "セブンイレブン 渋谷店",
+      purchasedAt: "2026-05-16",
+      items: [{ name: "おにぎり", amount: 120, category: "食費" }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBe("manual-2026-05-16-セブンイレブン 渋谷店");
+    }
+  });
+
+  test("amount が明細合計になる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "店舗A",
+      purchasedAt: "2026-05-16",
+      items: [
+        { name: "商品1", amount: 100, category: "日用品" },
+        { name: "商品2", amount: 230, category: "日用品" }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.amount).toBe(330);
+  });
+
+  test("purchasedAt が維持される", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "店舗A",
+      purchasedAt: "2026-05-20",
+      items: [{ name: "商品", amount: 200, category: "日用品" }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.purchasedAt).toBe("2026-05-20");
+  });
+
+  test("全明細が同一カテゴリなら、そのカテゴリになり needsReview false になる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "店舗A",
+      purchasedAt: "2026-05-16",
+      items: [
+        { name: "商品1", amount: 100, category: "交通" },
+        { name: "商品2", amount: 200, category: "交通" }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.category).toBe("交通");
+      expect(result.value.needsReview).toBe(false);
+    }
+  });
+
+  test("カテゴリ未指定明細がある場合、category は その他 になり needsReview true になる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "店舗A",
+      purchasedAt: "2026-05-16",
+      items: [
+        { name: "商品1", amount: 100, category: "食費" },
+        { name: "商品2", amount: 200 }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.category).toBe("その他");
+      expect(result.value.needsReview).toBe(true);
+    }
+  });
+
+  test("複数カテゴリが混在する場合、category は その他 になり needsReview true になる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "店舗A",
+      purchasedAt: "2026-05-16",
+      items: [
+        { name: "商品1", amount: 100, category: "食費" },
+        { name: "商品2", amount: 200, category: "日用品" }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.category).toBe("その他");
+      expect(result.value.needsReview).toBe(true);
+    }
+  });
+
+  test("income は変換できず ok false になる", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "income",
+      merchantRaw: "給与振込",
+      purchasedAt: "2026-05-16",
+      items: [{ name: "5月給与", amount: 300000, category: "その他" }]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("UNSUPPORTED_TRANSACTION_TYPE");
+  });
+
+  test("validateManualTransactionInput に失敗する入力は変換されない", () => {
+    const result = manualTransactionToAllocationInput({
+      type: "expense",
+      merchantRaw: "  ",
+      purchasedAt: "2026-05-16",
+      items: [{ name: "商品", amount: 100, category: "食費" }]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("missing_merchant");
   });
 });
