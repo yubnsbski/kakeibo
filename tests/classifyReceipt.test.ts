@@ -94,6 +94,18 @@ describe("classifyReceipt", () => {
     expect(result.reason).toBe("ambiguous merchant requires manual category");
   });
 
+  test("楽天は明細なしなら要確認にする", () => {
+    const result = classifyReceipt({
+      merchantRaw: "楽天市場",
+      items: [],
+      totalAmount: 5400
+    });
+
+    expect(result.category).toBeNull();
+    expect(result.needsReview).toBe(true);
+    expect(result.reasons).toEqual(["ambiguous_merchant_no_items"]);
+  });
+
   test("ドン・キホーテ表記ゆれは危険店舗として明細なし要確認", () => {
     const result = classifyReceipt({
       merchantRaw: "ドン・キホーテ 新宿店",
