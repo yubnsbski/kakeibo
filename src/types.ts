@@ -16,6 +16,22 @@ export type ReceiptInput = {
   userCategoryOverrides?: Partial<Record<string, Category>>;
 };
 
+export type TransactionType = "expense" | "income";
+
+export type ManualTransactionItemInput = {
+  name?: string;
+  memo?: string;
+  amount: number;
+  category?: Category;
+};
+
+export type ManualTransactionInput = {
+  date: string;
+  txType: TransactionType;
+  memo?: string;
+  items: ManualTransactionItemInput[];
+};
+
 export type ClassificationResult = {
   merchantNormalized: string;
   category: Category | null;

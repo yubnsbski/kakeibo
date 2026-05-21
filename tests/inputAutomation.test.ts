@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   exportAutomatedClassificationCsv,
+  manualTransactionToAllocationInput,
   parseReceiptCsv,
+  runManualTransactionInput,
   runClassification,
   runClassificationFromCsvRows,
+  validateManualTransactionInput,
   validateCsvRowInput
 } from "../src/inputAutomation";
 
@@ -92,5 +95,139 @@ describe("inputAutomation", () => {
     );
     expect(outCsv).toContain("r001");
     expect(outCsv).toContain("食費");
+  });
+
+  test("手入力 expense は実行成功する", () => {
+    const result = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "expense",
+      memo: "セブンイレブン",
+      items: [
+        { name: "おにぎり", amount: 120 },
+        { name: "牛乳", amount: 180 }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output.classification.category).toBe("食費");
+      expect(result.output.needsReview).toBe(false);
+      expect(result.output.allocation.totalAmount).toBe(300);
+    }
+  });
+
+  test("手入力で needsReview=true の結果を返せる", () => {
+    const result = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "expense",
+      memo: "Amazon",
+      items: [{ name: "不明商品", amount: 1200 }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output.needsReview).toBe(true);
+    }
+  });
+
+  test("手入力 income は拒否される", () => {
+    const validation = validateManualTransactionInput({
+      date: "2026-05-16",
+      txType: "income",
+      memo: "給与",
+      items: [{ name: "振込", amount: 200000 }]
+    });
+    expect(validation.ok).toBe(true);
+
+    const converted = manualTransactionToAllocationInput({
+      date: "2026-05-16",
+      txType: "income",
+      memo: "給与",
+      items: [{ name: "振込", amount: 200000 }]
+    });
+    expect(converted.ok).toBe(false);
+    if (!converted.ok) {
+      expect(converted.error).toBe("income_not_supported");
+    }
+
+    const result = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "income",
+      memo: "給与",
+      items: [{ name: "振込", amount: 200000 }]
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("income_not_supported");
+    }
+  });
+
+  test("手入力の日付不正または未入力は失敗する", () => {
+    const missingDate = validateManualTransactionInput({
+      date: "",
+      txType: "expense",
+      items: [{ name: "パン", amount: 100 }]
+    });
+    expect(missingDate.ok).toBe(false);
+    if (!missingDate.ok) expect(missingDate.error).toBe("missing_date");
+
+    const invalidDate = validateManualTransactionInput({
+      date: "2026/05/16",
+      txType: "expense",
+      items: [{ name: "パン", amount: 100 }]
+    });
+    expect(invalidDate.ok).toBe(false);
+    if (!invalidDate.ok) expect(invalidDate.error).toBe("invalid_date");
+  });
+
+  test("手入力 items空は失敗する", () => {
+    const result = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "expense",
+      items: []
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("missing_items");
+  });
+
+  test("手入力 amount不正は失敗する", () => {
+    const zero = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "expense",
+      items: [{ name: "パン", amount: 0 }]
+    });
+    expect(zero.ok).toBe(false);
+    if (!zero.ok) expect(zero.error).toBe("invalid_item_amount");
+
+    const notFinite = runManualTransactionInput({
+      date: "2026-05-16",
+      txType: "expense",
+      items: [{ name: "パン", amount: Number.NaN }]
+    });
+    expect(notFinite.ok).toBe(false);
+    if (!notFinite.ok) expect(notFinite.error).toBe("invalid_item_amount");
+  });
+
+  test("manualTransactionToAllocationInput と runManualTransactionInput の整合", () => {
+    const input = {
+      date: "2026-05-16",
+      txType: "expense" as const,
+      memo: "セブンイレブン",
+      items: [{ name: "サンドイッチ", amount: 320 }]
+    };
+
+    const converted = manualTransactionToAllocationInput(input);
+    expect(converted.ok).toBe(true);
+    if (converted.ok) {
+      expect(converted.value.totalAmount).toBe(320);
+      expect(converted.value.receiptInput.purchasedAt).toBe("2026-05-16");
+      expect(converted.value.receiptInput.items).toEqual(["サンドイッチ"]);
+    }
+
+    const executed = runManualTransactionInput(input);
+    expect(executed.ok).toBe(true);
+    if (executed.ok) {
+      expect(executed.output.allocation.totalAmount).toBe(320);
+    }
   });
 });

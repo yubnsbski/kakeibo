@@ -1,7 +1,13 @@
 import { classifyReceipt } from "./classifyReceipt";
 import { classifyReceiptBreakdown, type BreakdownOptions } from "./classifyReceiptBreakdown";
 import { allocateAmountsByCategory } from "./allocateAmounts";
-import type { Category, ClassificationResult, ReceiptInput } from "./types";
+import type {
+  AmountAllocationResult,
+  Category,
+  ClassificationResult,
+  ManualTransactionInput,
+  ReceiptInput
+} from "./types";
 
 export type CsvReceiptRow = {
   receipt_id: string;
@@ -40,6 +46,59 @@ export type RunClassificationResult = {
   message: string;
 };
 
+export type ManualInputValidationErrorCode =
+  | "missing_date"
+  | "invalid_date"
+  | "missing_tx_type"
+  | "missing_items"
+  | "invalid_item_amount"
+  | "missing_item_text";
+
+export type ManualInputUnsupportedErrorCode =
+  | "income_not_supported";
+
+export type ManualInputErrorCode =
+  | ManualInputValidationErrorCode
+  | ManualInputUnsupportedErrorCode;
+
+export type ManualInputValidationResult = {
+  ok: true;
+} | {
+  ok: false;
+  error: ManualInputValidationErrorCode;
+  message: string;
+};
+
+export type ManualAllocationInput = {
+  receiptInput: ReceiptInput;
+  totalAmount: number;
+  source: "manual_input";
+};
+
+export type ManualToAllocationResult = {
+  ok: true;
+  value: ManualAllocationInput;
+} | {
+  ok: false;
+  error: ManualInputErrorCode;
+  message: string;
+};
+
+export type ManualTransactionOutput = {
+  classification: ClassificationResult;
+  allocation: AmountAllocationResult;
+  needsReview: boolean;
+};
+
+export type RunManualTransactionResult = {
+  ok: true;
+  output: ManualTransactionOutput;
+} | {
+  ok: false;
+  error: ManualInputErrorCode;
+  message: string;
+};
+
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
 
@@ -47,6 +106,16 @@ const VALIDATION_MESSAGES: Record<InputValidationErrorCode, string> = {
   missing_merchant: "店舗名を入力してください",
   invalid_total_amount: "金額は0より大きい値を入力してください",
   invalid_purchased_at: "日付はYYYY-MM-DD形式で入力してください"
+};
+
+const MANUAL_VALIDATION_MESSAGES: Record<ManualInputErrorCode, string> = {
+  missing_date: "日付を入力してください",
+  invalid_date: "日付はYYYY-MM-DD形式で入力してください",
+  missing_tx_type: "取引種別を選択してください",
+  missing_items: "明細を1件以上入力してください",
+  invalid_item_amount: "明細金額は0より大きい値を入力してください",
+  missing_item_text: "各明細はnameまたはmemoのいずれかを入力してください",
+  income_not_supported: "手入力は現在、支出のみ対応です"
 };
 
 export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
@@ -92,6 +161,98 @@ function isValidDateYYYYMMDD(dateText: string): boolean {
   const d = new Date(`${dateText}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return false;
   return d.toISOString().slice(0, 10) === dateText;
+}
+
+export function validateManualTransactionInput(
+  input: ManualTransactionInput
+): ManualInputValidationResult {
+  if (!input.date?.trim()) {
+    return { ok: false, error: "missing_date", message: MANUAL_VALIDATION_MESSAGES.missing_date };
+  }
+  if (!isValidDateYYYYMMDD(input.date)) {
+    return { ok: false, error: "invalid_date", message: MANUAL_VALIDATION_MESSAGES.invalid_date };
+  }
+  if (!input.txType) {
+    return { ok: false, error: "missing_tx_type", message: MANUAL_VALIDATION_MESSAGES.missing_tx_type };
+  }
+  if (!Array.isArray(input.items) || input.items.length === 0) {
+    return { ok: false, error: "missing_items", message: MANUAL_VALIDATION_MESSAGES.missing_items };
+  }
+
+  for (const item of input.items) {
+    if (!Number.isFinite(item.amount) || item.amount <= 0) {
+      return {
+        ok: false,
+        error: "invalid_item_amount",
+        message: MANUAL_VALIDATION_MESSAGES.invalid_item_amount
+      };
+    }
+
+    const label = item.name?.trim() || item.memo?.trim() || "";
+    if (!label) {
+      return {
+        ok: false,
+        error: "missing_item_text",
+        message: MANUAL_VALIDATION_MESSAGES.missing_item_text
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function manualTransactionToAllocationInput(
+  input: ManualTransactionInput
+): ManualToAllocationResult {
+  const validation = validateManualTransactionInput(input);
+  if (!validation.ok) {
+    return validation;
+  }
+
+  if (input.txType === "income") {
+    return {
+      ok: false,
+      error: "income_not_supported",
+      message: MANUAL_VALIDATION_MESSAGES.income_not_supported
+    };
+  }
+
+  const itemTexts = input.items.map((item) => (item.name?.trim() || item.memo?.trim() || "").trim());
+  const totalAmount = input.items.reduce((sum, item) => sum + item.amount, 0);
+
+  return {
+    ok: true,
+    value: {
+      receiptInput: {
+        merchantRaw: input.memo?.trim() || "手入力",
+        items: itemTexts,
+        totalAmount,
+        purchasedAt: input.date
+      },
+      totalAmount,
+      source: "manual_input"
+    }
+  };
+}
+
+export function runManualTransactionInput(input: ManualTransactionInput): RunManualTransactionResult {
+  const normalized = manualTransactionToAllocationInput(input);
+  if (!normalized.ok) {
+    return normalized;
+  }
+
+  const classification = classifyReceipt(normalized.value.receiptInput);
+  const breakdown = classifyReceiptBreakdown(normalized.value.receiptInput);
+  const allocation = allocateAmountsByCategory(breakdown, normalized.value.totalAmount);
+
+  return {
+    ok: true,
+    output: {
+      classification,
+      allocation,
+      needsReview: classification.needsReview || breakdown.needsReview
+    }
+  };
 }
 
 export function runClassification(
