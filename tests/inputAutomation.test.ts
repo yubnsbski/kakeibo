@@ -210,7 +210,7 @@ describe("inputAutomation", () => {
     ).toBe("missing_item_name");
   });
 
-  test("amountが0/負数/NaN/Infinityの場合に拒否する", () => {
+  test("amountが0の場合に拒否する", () => {
     expect(
       validateManualTransactionInput({
         type: "expense",
@@ -219,7 +219,9 @@ describe("inputAutomation", () => {
         items: [{ name: "商品", amount: 0 }]
       })
     ).toBe("invalid_item_amount");
+  });
 
+  test("amountが負数の場合に拒否する", () => {
     expect(
       validateManualTransactionInput({
         type: "expense",
@@ -228,7 +230,9 @@ describe("inputAutomation", () => {
         items: [{ name: "商品", amount: -1 }]
       })
     ).toBe("invalid_item_amount");
+  });
 
+  test("amountがNaNの場合に拒否する", () => {
     expect(
       validateManualTransactionInput({
         type: "expense",
@@ -237,7 +241,9 @@ describe("inputAutomation", () => {
         items: [{ name: "商品", amount: Number.NaN }]
       })
     ).toBe("invalid_item_amount");
+  });
 
+  test("amountがInfinityの場合に拒否する", () => {
     expect(
       validateManualTransactionInput({
         type: "expense",
@@ -249,14 +255,14 @@ describe("inputAutomation", () => {
   });
 
   test("無効カテゴリを拒否する", () => {
-    expect(
-      validateManualTransactionInput({
-        type: "expense",
-        merchantRaw: "店舗",
-        purchasedAt: "2026-05-16",
-        items: [{ name: "商品", amount: 100, category: "無効カテゴリ" as never }]
-      })
-    ).toBe("invalid_item_category");
+    const invalidCategoryInput = {
+      type: "expense",
+      merchantRaw: "店舗",
+      purchasedAt: "2026-05-16",
+      items: [{ name: "商品", amount: 100, category: "無効カテゴリ" }]
+    } as any;
+
+    expect(validateManualTransactionInput(invalidCategoryInput)).toBe("invalid_item_category");
   });
 
   test("定義済みカテゴリを受け付ける", () => {
