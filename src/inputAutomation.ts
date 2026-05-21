@@ -1,5 +1,5 @@
 import { classifyReceipt } from "./classifyReceipt";
-import type { Category, ClassificationResult, ReceiptInput } from "./types";
+import type { Category, ClassificationResult, ManualTransactionInput, ReceiptInput, TransactionType } from "./types";
 
 export type CsvReceiptRow = {
   receipt_id: string;
@@ -12,7 +12,12 @@ export type CsvReceiptRow = {
 export type InputValidationErrorCode =
   | "missing_merchant"
   | "invalid_total_amount"
-  | "invalid_purchased_at";
+  | "invalid_purchased_at"
+  | "invalid_transaction_type"
+  | "missing_items"
+  | "missing_item_name"
+  | "invalid_item_amount"
+  | "invalid_item_category";
 
 export type AutomatedClassificationRow = {
   receipt_id: string;
@@ -49,8 +54,23 @@ const OUTPUT_HEADER =
 const VALIDATION_MESSAGES: Record<InputValidationErrorCode, string> = {
   missing_merchant: "店舗名を入力してください",
   invalid_total_amount: "金額は0より大きい値を入力してください",
-  invalid_purchased_at: "日付はYYYY-MM-DD形式で入力してください"
+  invalid_purchased_at: "日付はYYYY-MM-DD形式で入力してください",
+  invalid_transaction_type: "取引種別はexpenseまたはincomeを指定してください",
+  missing_items: "明細を1件以上入力してください",
+  missing_item_name: "明細名を入力してください",
+  invalid_item_amount: "明細金額は0より大きい有限数を入力してください",
+  invalid_item_category: "カテゴリが不正です"
 };
+
+const categories: Category[] = ["食費", "日用品", "交通", "医療", "通信", "娯楽", "教育", "その他"];
+
+function isCategory(value: unknown): value is Category {
+  return typeof value === "string" && categories.includes(value as Category);
+}
+
+function isTransactionType(value: unknown): value is TransactionType {
+  return value === "expense" || value === "income";
+}
 
 export function parseReceiptCsv(csvText: string): CsvReceiptRow[] {
   return parseReceiptCsvWithDiagnostics(csvText).rows;
@@ -135,6 +155,21 @@ export function validateCsvRowInput(row: CsvReceiptRow): InputValidationErrorCod
   if (!row.merchantRaw.trim()) return "missing_merchant";
   if (!Number.isFinite(row.totalAmount) || row.totalAmount <= 0) return "invalid_total_amount";
   if (!isValidDateYYYYMMDD(row.purchasedAt)) return "invalid_purchased_at";
+  return null;
+}
+
+export function validateManualTransactionInput(input: ManualTransactionInput): InputValidationErrorCode | null {
+  if (!isTransactionType(input.type)) return "invalid_transaction_type";
+  if (!input.merchantRaw.trim()) return "missing_merchant";
+  if (!isValidDateYYYYMMDD(input.purchasedAt)) return "invalid_purchased_at";
+  if (input.items.length === 0) return "missing_items";
+
+  for (const item of input.items) {
+    if (!item.name.trim()) return "missing_item_name";
+    if (!Number.isFinite(item.amount) || item.amount <= 0) return "invalid_item_amount";
+    if (item.category !== undefined && !isCategory(item.category)) return "invalid_item_category";
+  }
+
   return null;
 }
 

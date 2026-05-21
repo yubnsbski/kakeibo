@@ -8,6 +8,22 @@ export type Category =
   | "教育"
   | "その他";
 
+export type TransactionType = "expense" | "income";
+
+export type ManualTransactionItemInput = {
+  name: string;
+  amount: number;
+  category?: Category;
+};
+
+export type ManualTransactionInput = {
+  type: TransactionType;
+  merchantRaw: string;
+  purchasedAt: string;
+  items: ManualTransactionItemInput[];
+  memo?: string;
+};
+
 export type ReceiptInput = {
   merchantRaw: string;
   items?: string[];

@@ -5,6 +5,7 @@ import {
   parseReceiptCsvWithDiagnostics,
   runClassification,
   runClassificationFromCsvRows,
+  validateManualTransactionInput,
   validateCsvRowInput
 } from "../src/inputAutomation";
 
@@ -129,5 +130,143 @@ describe("inputAutomation", () => {
     expect(rows[0].totalAmount).toBe(1280);
     expect(rows[1].totalAmount).toBe(2000);
     expect(rows[2].totalAmount).toBe(980);
+  });
+
+  test("正常なexpense手入力を受け付ける", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "セブンイレブン 渋谷店",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "おにぎり", amount: 150, category: "食費" }],
+        memo: "昼食"
+      })
+    ).toBeNull();
+  });
+
+  test("正常なincome手入力を受け付ける", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "income",
+        merchantRaw: "給与振込",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "5月給与", amount: 300000 }]
+      })
+    ).toBeNull();
+  });
+
+  test("merchantRaw空を拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "   ",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "おにぎり", amount: 150 }]
+      })
+    ).toBe("missing_merchant");
+  });
+
+  test("purchasedAt不正形式を拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026/05/16",
+        items: [{ name: "商品", amount: 100 }]
+      })
+    ).toBe("invalid_purchased_at");
+  });
+
+  test("存在しない日付を拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-02-30",
+        items: [{ name: "商品", amount: 100 }]
+      })
+    ).toBe("invalid_purchased_at");
+  });
+
+  test("items空配列を拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: []
+      })
+    ).toBe("missing_items");
+  });
+
+  test("item.name空を拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "   ", amount: 100 }]
+      })
+    ).toBe("missing_item_name");
+  });
+
+  test("amountが0/負数/NaN/Infinityの場合に拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: 0 }]
+      })
+    ).toBe("invalid_item_amount");
+
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: -1 }]
+      })
+    ).toBe("invalid_item_amount");
+
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: Number.NaN }]
+      })
+    ).toBe("invalid_item_amount");
+
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: Number.POSITIVE_INFINITY }]
+      })
+    ).toBe("invalid_item_amount");
+  });
+
+  test("無効カテゴリを拒否する", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: 100, category: "無効カテゴリ" as never }]
+      })
+    ).toBe("invalid_item_category");
+  });
+
+  test("定義済みカテゴリを受け付ける", () => {
+    expect(
+      validateManualTransactionInput({
+        type: "expense",
+        merchantRaw: "店舗",
+        purchasedAt: "2026-05-16",
+        items: [{ name: "商品", amount: 100, category: "日用品" }]
+      })
+    ).toBeNull();
   });
 });
