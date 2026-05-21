@@ -1,5 +1,12 @@
 import { classifyReceipt } from "./classifyReceipt";
-import type { Category, ClassificationResult, ReceiptInput } from "./types";
+import type { AllocationInput } from "./walletEngine";
+import type {
+  Category,
+  ClassificationResult,
+  ManualTransactionInput,
+  ReceiptInput,
+  TransactionType
+} from "./types";
 
 export type CsvReceiptRow = {
   receipt_id: string;
@@ -42,6 +49,16 @@ export type ParseCsvResult = {
   rows: CsvReceiptRow[];
   error?: "invalid_header";
 };
+
+export type ManualTransactionValidationErrorCode = InputValidationErrorCode;
+
+export type ManualTransactionConversionResult =
+  | { ok: true; input: ManualTransactionInput; allocationInput: AllocationInput }
+  | { ok: false; error: InputValidationErrorCode | "UNSUPPORTED_TRANSACTION_TYPE" };
+
+export type ManualTransactionRunResult =
+  | { ok: true; input: ManualTransactionInput; allocationInput: AllocationInput; needsReview: boolean }
+  | { ok: false; error: InputValidationErrorCode | "UNSUPPORTED_TRANSACTION_TYPE" };
 
 const OUTPUT_HEADER =
   "receipt_id,merchant_normalized,items_text,screening_category,needs_review,reason,confidence,amount,purchased_at";
@@ -143,6 +160,65 @@ function isValidDateYYYYMMDD(dateText: string): boolean {
   const d = new Date(`${dateText}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return false;
   return d.toISOString().slice(0, 10) === dateText;
+}
+
+export function validateManualTransactionInput(
+  input: ManualTransactionInput
+): ManualTransactionValidationErrorCode | null {
+  if (!input.merchantRaw.trim()) return "missing_merchant";
+  if (!Number.isFinite(input.totalAmount) || input.totalAmount <= 0) return "invalid_total_amount";
+  if (!isValidDateYYYYMMDD(input.purchasedAt)) return "invalid_purchased_at";
+  return null;
+}
+
+function toManualItemsText(input: ManualTransactionInput): string[] {
+  return (input.items ?? []).map((item) => item.name);
+}
+
+function resolveManualCategory(input: ManualTransactionInput): { category: Category | null; needsReview: boolean } {
+  const categorized = (input.items ?? []).find((item) => item.category && item.category.trim().length > 0);
+  const hasUncategorized = (input.items ?? []).some((item) => !item.category);
+  return {
+    category: categorized?.category ?? null,
+    needsReview: hasUncategorized || !categorized
+  };
+}
+
+export function manualTransactionToAllocationInput(
+  input: ManualTransactionInput
+): ManualTransactionConversionResult {
+  const validationError = validateManualTransactionInput(input);
+  if (validationError) return { ok: false, error: validationError };
+  if ((input.txType as TransactionType) === "income") {
+    return { ok: false, error: "UNSUPPORTED_TRANSACTION_TYPE" };
+  }
+
+  const { category, needsReview } = resolveManualCategory(input);
+
+  return {
+    ok: true,
+    input,
+    allocationInput: {
+      id: `manual-${input.purchasedAt}-${Math.abs(input.totalAmount)}`,
+      amount: input.totalAmount,
+      category,
+      needsReview,
+      merchantNormalized: input.merchantRaw,
+      items: toManualItemsText(input),
+      purchasedAt: input.purchasedAt
+    }
+  };
+}
+
+export function runManualTransactionInput(input: ManualTransactionInput): ManualTransactionRunResult {
+  const converted = manualTransactionToAllocationInput(input);
+  if (!converted.ok) return converted;
+  return {
+    ok: true,
+    input: converted.input,
+    allocationInput: converted.allocationInput,
+    needsReview: converted.allocationInput.needsReview
+  };
 }
 
 export function runClassification(

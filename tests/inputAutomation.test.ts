@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   exportAutomatedClassificationCsv,
+  manualTransactionToAllocationInput,
   parseReceiptCsv,
   parseReceiptCsvWithDiagnostics,
+  runManualTransactionInput,
   runClassification,
   runClassificationFromCsvRows,
+  validateManualTransactionInput,
   validateCsvRowInput
 } from "../src/inputAutomation";
 
@@ -129,5 +132,90 @@ describe("inputAutomation", () => {
     expect(rows[0].totalAmount).toBe(1280);
     expect(rows[1].totalAmount).toBe(2000);
     expect(rows[2].totalAmount).toBe(980);
+  });
+
+  test("valid expense manual transaction を runManualTransactionInput で処理できる", () => {
+    const input = {
+      merchantRaw: "セブンイレブン 渋谷店",
+      totalAmount: 620,
+      purchasedAt: "2026-05-16",
+      txType: "expense" as const,
+      items: [{ name: "おにぎり", amount: 200, category: "食費" as const }]
+    };
+
+    const result = runManualTransactionInput(input);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.allocationInput.amount).toBe(620);
+      expect(result.needsReview).toBe(result.allocationInput.needsReview);
+    }
+  });
+
+  test("カテゴリ未指定明細がある場合、成功するが needsReview true", () => {
+    const result = runManualTransactionInput({
+      merchantRaw: "Amazon",
+      totalAmount: 3000,
+      purchasedAt: "2026-05-16",
+      txType: "expense",
+      items: [{ name: "イヤホン", amount: 3000, category: null }]
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.needsReview).toBe(true);
+      expect(result.allocationInput.needsReview).toBe(true);
+    }
+  });
+
+  test("income は ok false + UNSUPPORTED_TRANSACTION_TYPE", () => {
+    const result = runManualTransactionInput({
+      merchantRaw: "給与",
+      totalAmount: 250000,
+      purchasedAt: "2026-05-16",
+      txType: "income",
+      items: []
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("UNSUPPORTED_TRANSACTION_TYPE");
+    }
+  });
+
+  test("validateManualTransactionInput に失敗する入力は ok false", () => {
+    const input = {
+      merchantRaw: "",
+      totalAmount: 0,
+      purchasedAt: "2026/05/16",
+      txType: "expense" as const,
+      items: []
+    };
+
+    expect(validateManualTransactionInput(input)).toBe("missing_merchant");
+
+    const result = runManualTransactionInput(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("missing_merchant");
+    }
+  });
+
+  test("runManualTransactionInput は manualTransactionToAllocationInput と矛盾しない", () => {
+    const input = {
+      merchantRaw: "ローソン",
+      totalAmount: 980,
+      purchasedAt: "2026-05-16",
+      txType: "expense" as const,
+      items: [{ name: "牛乳", amount: 980, category: "食費" as const }]
+    };
+
+    const converted = manualTransactionToAllocationInput(input);
+    const ran = runManualTransactionInput(input);
+
+    expect(converted.ok).toBe(ran.ok);
+    if (converted.ok && ran.ok) {
+      expect(ran.allocationInput).toEqual(converted.allocationInput);
+      expect(ran.needsReview).toBe(converted.allocationInput.needsReview);
+    }
   });
 });

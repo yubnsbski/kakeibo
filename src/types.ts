@@ -25,3 +25,19 @@ export type ClassificationResult = {
   reasons: string[];
   screeningLabel: "recordable" | "needs_review";
 };
+
+export type TransactionType = "expense" | "income";
+
+export type ManualTransactionItemInput = {
+  name: string;
+  amount: number;
+  category?: Category | null;
+};
+
+export type ManualTransactionInput = {
+  merchantRaw: string;
+  totalAmount: number;
+  purchasedAt: string;
+  txType: TransactionType;
+  items?: ManualTransactionItemInput[];
+};
