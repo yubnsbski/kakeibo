@@ -1,110 +1,63 @@
 import { useState } from "react";
-import {
-  bytesToBase64,
-  decryptBytes,
-  encryptBytes,
-  generateKey,
-  type EncryptedBlob,
-} from "./encrypt";
+import "./App.css";
+import { UploadView } from "./components/UploadView";
+import { CryptoGate } from "./crypto/ui/CryptoGate";
+import { EncryptedTxView } from "./crypto/ui/EncryptedTxView";
+import { EncryptedGraphView } from "./crypto/ui/EncryptedGraphView";
+import "./crypto/crypto-ui.css";
 
-type State =
-  | { kind: "idle" }
-  | { kind: "encrypted"; blob: EncryptedBlob; key: CryptoKey; mime: string; originalSize: number }
-  | { kind: "decrypted"; url: string; mime: string };
+type Tab =
+  | "upload"
+  | "list"
+  | "graph"
+;
 
-export function App() {
-  const [state, setState] = useState<State>({ kind: "idle" });
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleFile(file: File) {
-    setError(null);
-    try {
-      const bytes = await file.arrayBuffer();
-      const key = await generateKey();
-      const blob = await encryptBytes(key, bytes);
-      setState({
-        kind: "encrypted",
-        blob,
-        key,
-        mime: file.type || "application/octet-stream",
-        originalSize: file.size,
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  async function handleDecrypt() {
-    if (state.kind !== "encrypted") return;
-    setError(null);
-    try {
-      const plain = await decryptBytes(state.key, state.blob);
-      const blob = new Blob([plain], { type: state.mime });
-      const url = URL.createObjectURL(blob);
-      setState({ kind: "decrypted", url, mime: state.mime });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
+export default function App() {
+  const [tab, setTab] = useState<Tab>("upload");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <main>
-      <h1>kakeibo</h1>
+    <CryptoGate>
+      <div className="app">
+        <header className="app-header">
+          <h1>家計簿</h1>
+          <nav className="tabs">
+            <button
+              className={tab === "upload" ? "active" : ""}
+              onClick={() => setTab("upload")}
+            >
+              取込
+            </button>
+            <button
+              className={tab === "list" ? "active" : ""}
+              onClick={() => setTab("list")}
+            >
+              一覧
+            </button>
+            <button
+              className={tab === "graph" ? "active" : ""}
+              onClick={() => setTab("graph")}
+            >
+              グラフ
+            </button>
+          </nav>
+        </header>
 
-      <section>
-        <h2>レシート画像をフロントで暗号化</h2>
-        <p className="muted">
-          画像はブラウザ内で AES-GCM 暗号化されます。鍵はメモリ上のみで保持し、サーバーには送信しません。
-        </p>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
-          }}
-        />
-        {error && <p style={{ color: "#b91c1c" }}>error: {error}</p>}
-      </section>
-
-      {state.kind === "encrypted" && (
-        <section>
-          <h2>暗号化結果</h2>
-          <p className="muted">
-            元サイズ: {state.originalSize.toLocaleString()} B / 暗号文サイズ:{" "}
-            {state.blob.ciphertext.byteLength.toLocaleString()} B
-          </p>
-          <p className="muted">MIME: {state.mime}</p>
-          <pre>
-            iv (base64): {bytesToBase64(state.blob.iv)}
-            {"\n"}
-            ciphertext (head): {bytesToBase64(
-              new Uint8Array(state.blob.ciphertext).slice(0, 24),
-            )}
-            ...
-          </pre>
-          <button onClick={() => void handleDecrypt()}>
-            メモリ上の鍵で復号して表示
-          </button>
-        </section>
-      )}
-
-      {state.kind === "decrypted" && (
-        <section>
-          <h2>復号プレビュー</h2>
-          {state.mime.startsWith("image/") ? (
-            <img
-              src={state.url}
-              alt="decrypted"
-              style={{ maxWidth: "100%", borderRadius: 6 }}
+        <main>
+          {tab === "upload" && (
+            <UploadView
+              onUploaded={() => {
+                setRefreshKey((k) => k + 1);
+                setTab("list");
+              }}
             />
-          ) : (
-            <a href={state.url} download>
-              ダウンロード
-            </a>
           )}
-        </section>
-      )}
-    </main>
+
+          {tab === "list" && <EncryptedTxView refreshKey={refreshKey} />}
+          {tab === "graph" && <EncryptedGraphView refreshKey={refreshKey} />}
+
+        </main>
+      </div>
+    </CryptoGate>
   );
 }

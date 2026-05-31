@@ -4,6 +4,31 @@ coverage
 .env
 .env.*
 .DS_Store
-package-lock.json
+node_modules
+
+# Local backup snapshots (do not commit; managed via scripts/)
+backups/
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+backend/.venv/
+backend/.tmp-compare/
+
+# Runtime data
+backend/data.db
+backend/data.db.bak*
+backend/uploads/
+
+# Local env
+backend/.env
+.vscode/
+
+# Accidental artifacts
+backup:
+frontend/frontend@0.0.0
+frontend/tsc
+how --stat*
+kakeibo/
+kakeibo-frontend/
