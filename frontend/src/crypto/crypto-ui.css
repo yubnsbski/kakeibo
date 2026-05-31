@@ -1,0 +1,145 @@
+/**
+ * E2E暗号化 UI のスタイル。
+ * 既存アプリのトーンに馴染む、控えめで実用的なデザイン。
+ */
+
+/* ゲート全体 — 画面中央にカードを配置 */
+.crypto-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: #f5f5f4;
+}
+
+/* カード */
+.crypto-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #e0e0de;
+  border-radius: 12px;
+  padding: 28px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.crypto-card h2 {
+  margin: 0 0 12px;
+  font-size: 1.2rem;
+  color: #1a1a18;
+}
+
+/* 説明文 */
+.crypto-hint {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: #57606a;
+  margin: 0 0 18px;
+}
+
+.crypto-hint strong {
+  color: #cf5a23;
+}
+
+/* 入力ラベル */
+.crypto-label {
+  display: block;
+  font-size: 0.84rem;
+  color: #44443f;
+  margin-bottom: 14px;
+}
+
+.crypto-label input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 10px;
+  font-size: 0.95rem;
+  border: 1px solid #d0d0cd;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.crypto-label input:focus {
+  outline: none;
+  border-color: #5a8f6f;
+  box-shadow: 0 0 0 2px rgba(90, 143, 111, 0.15);
+}
+
+/* ボタン */
+.crypto-card button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: #5a8f6f;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.crypto-card button:hover:not(:disabled) {
+  background: #4a7c5e;
+}
+
+.crypto-card button:disabled {
+  background: #b8bdb9;
+  cursor: not-allowed;
+}
+
+/* リンク風ボタン (リカバリー導線) */
+.crypto-card button.crypto-link {
+  background: none;
+  color: #5a8f6f;
+  font-weight: 400;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  margin-top: 12px;
+}
+
+.crypto-card button.crypto-link:hover:not(:disabled) {
+  background: none;
+  color: #3a6a4c;
+}
+
+/* エラー表示 */
+.crypto-error {
+  font-size: 0.84rem;
+  color: #cf222e;
+  margin: 4px 0 12px;
+}
+
+/* リカバリーコード表示 */
+.crypto-recovery-code {
+  font-family: "SF Mono", "Consolas", monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  line-height: 1.7;
+  background: #f0f3f1;
+  border: 1px dashed #9bb8a7;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0 0 16px;
+  color: #1a1a18;
+  text-align: center;
+}
+
+/* 保管確認チェックボックス */
+.crypto-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: #44443f;
+  margin: 16px 0;
+  cursor: pointer;
+}
+
+.crypto-checkbox input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
