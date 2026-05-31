@@ -32,3 +32,5 @@ frontend/tsc
 how --stat*
 kakeibo/
 kakeibo-frontend/
+
+*.tsbuildinfo

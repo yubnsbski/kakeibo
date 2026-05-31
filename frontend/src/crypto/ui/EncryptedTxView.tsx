@@ -21,6 +21,7 @@ import {
   type TxType,
 } from "../txPayload";
 
+import { DataIntegrityCheck } from "./DataIntegrityCheck";
 type DecryptedRow = {
   id: number;
   raw: EncryptedTxRow;
@@ -268,6 +269,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
   return (
     <section style={{ border: "1px solid #ddd", padding: 16, marginTop: 16 }}>
       <h2>取引一覧</h2>
+      <DataIntegrityCheck />
       <p className="hint">
         encrypted_transactions を取得し、ブラウザ側で復号して表示・編集します。
       </p>

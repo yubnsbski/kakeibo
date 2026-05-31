@@ -22,6 +22,12 @@
  *                                  [アンロック完了]
  *
  * アンロック完了後は children (アプリ本体) を表示する。
+ *
+ * ── 鍵検証の方針 (セキュリティレビューによる修正) ──
+ * 鍵検証はフェイルセーフ。検証できない時はアンロックを「許可しない」。
+ * 旧実装は取得失敗時に true を返し、誤パスフレーズでもアンロックが
+ * 通る穴があった。その状態で取引を保存すると、既存データと異なる鍵で
+ * 暗号化されたデータが混入し (データ分裂)、復旧困難になる。
  */
 import { useEffect, useState } from "react";
 import {
@@ -53,37 +59,67 @@ interface Props {
 /** API のベース URL。 */
 const API_BASE = "/api";
 
+/** 鍵検証で試し復号する最大件数 (データ分裂の検知も兼ねる)。 */
+const VERIFY_SAMPLE_SIZE = 5;
+
+/** 鍵検証の結果。 */
+export type KeyVerifyResult =
+  | { kind: "ok" } // 全サンプル復号成功、または検証対象なし
+  | { kind: "wrong_key" } // 全サンプル復号失敗 = 鍵が誤り
+  | { kind: "partial"; ok: number; total: number } // 一部のみ成功 = データ分裂の疑い
+  | { kind: "unavailable" }; // サーバーに接続できず検証不能
+
 /**
- * 鍵が正しいか検証する。
+ * 鍵が正しいかを、暗号化取引の試し復号で検証する。
  *
- * 暗号化取引が1件でもあれば、その payload を試し復号する。
- * 復号に成功すれば鍵は正しい。0件なら検証不能なので true を返す
- * (初回セットアップ直後など、まだデータが無い場合)。
+ * フェイルセーフ設計:
+ *  - サーバーに繋がらない → "unavailable" (アンロックは拒否)
+ *  - 暗号化取引が0件 → "ok" (検証対象が無いだけ。初回セットアップ直後など)
+ *  - サンプルを試し復号し、全成功 → "ok" / 全失敗 → "wrong_key"
+ *  - 一部だけ成功 → "partial" (異なる鍵で保存されたデータの混在を疑う)
  */
-async function verifyKeyAgainstData(key: CryptoKey): Promise<boolean> {
+async function verifyKeyAgainstData(
+  key: CryptoKey,
+): Promise<KeyVerifyResult> {
   let rows: Array<{ encrypted_payload: string }>;
   try {
     const res = await fetch(`${API_BASE}/encrypted-tx`);
     if (!res.ok) {
-      return true; // 取得失敗時は検証スキップ (アンロック自体は許可)
+      // 取得失敗。検証できない以上、アンロックを許可してはいけない。
+      return { kind: "unavailable" };
     }
     rows = await res.json();
   } catch {
-    return true;
+    return { kind: "unavailable" };
   }
 
-  if (rows.length === 0) {
-    return true; // データが無いので検証不能 → 許可
+  if (!Array.isArray(rows) || rows.length === 0) {
+    // 検証対象が無い。初回セットアップ直後など。鍵の正否は判定不能だが、
+    // データが無いので誤鍵で保存しても分裂は起きない。アンロック許可。
+    return { kind: "ok" };
   }
 
-  // 先頭1件を試し復号。
-  try {
-    const record: EncryptedRecord = JSON.parse(rows[0].encrypted_payload);
-    await decryptJson(key, record);
-    return true;
-  } catch {
-    return false; // 復号失敗 = 鍵 (パスフレーズ/コード) が誤り
+  // 先頭 VERIFY_SAMPLE_SIZE 件を試し復号する。
+  const sample = rows.slice(0, VERIFY_SAMPLE_SIZE);
+  let success = 0;
+  for (const row of sample) {
+    try {
+      const record: EncryptedRecord = JSON.parse(row.encrypted_payload);
+      await decryptJson(key, record);
+      success += 1;
+    } catch {
+      // この1件は復号できなかった。
+    }
   }
+
+  if (success === 0) {
+    return { kind: "wrong_key" };
+  }
+  if (success === sample.length) {
+    return { kind: "ok" };
+  }
+  // 一部だけ成功 = サンプル内に異なる鍵のデータが混在している。
+  return { kind: "partial", ok: success, total: sample.length };
 }
 
 export function CryptoGate({ children }: Props) {
