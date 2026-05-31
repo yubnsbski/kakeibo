@@ -1,17 +1,33 @@
-"""Receipt upload: image → OCR → classify → auto-save."""
+"""Receipt OCR API.
+
+    Existing compatibility endpoint.
+
+- /api/receipts/preview:
+    E2E encryption-oriented endpoint.
+    Runs OCR/classification only.
+    Does NOT save uploaded image.
+    Does NOT save Receipt / Transaction / TransactionItem records.
+    Frontend should encrypt the returned payload and save it to /api/encrypted-tx.
+"""
+
 from __future__ import annotations
+
 from datetime import date, datetime
 from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.classifier import ReceiptInput, classify_receipt
+from app.classifier import ReceiptInput, classify_line_items, classify_receipt
 from app.database import get_session
 from app.models import (
-    CategoryMaster, Receipt, Transaction, UserCategoryOverride, calc_tax_amount,
+    CategoryMaster,
+    UserCategoryOverride,
+    calc_tax_amount,
 )
 from app.ocr import extract_receipt_fields, load_image, preprocess_for_ocr, run_ocr
+from app.ocr.gemini_extract import extract_with_gemini, is_gemini_available
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
 
@@ -22,21 +38,46 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 _ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"}
 _MAX_BYTES = 15 * 1024 * 1024
 
+_MIME_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+}
 
-class ReceiptUploadResponse(BaseModel):
-    transaction_id: int
-    filename: str
+
+class LineItemOut(BaseModel):
+    item: str
+    amount: int
+    amount_extracted: bool
+    category: str | None
+    reason: str
+
+
+class ReceiptPreviewResponse(BaseModel):
+    """OCR/classification response without any plaintext persistence."""
+
+    ocr_engine: str
     raw_text: str
     merchant_raw: str
     items: list[str]
     total_amount: int | None
+    amount: int
     tax_amount: int
+    purchased_at: date
     classification: dict
+    line_items: list[LineItemOut]
+    category: str | None
+    needs_review: bool
+    confidence: float
+    reason: str
 
 
-def _load_overrides(session: Session) -> dict:
+def _load_overrides(session: Session) -> dict[str, str]:
     rows = session.exec(select(UserCategoryOverride)).all()
-    return {row.merchant_pattern: row.category for row in rows}  # type: ignore
+    return {row.merchant_pattern: row.category for row in rows}
 
 
 def _tax_rate_for(category: str | None, session: Session) -> int:
@@ -46,76 +87,171 @@ def _tax_rate_for(category: str | None, session: Session) -> int:
     return row.tax_rate if row else 10
 
 
-@router.post("/upload", response_model=ReceiptUploadResponse)
-async def upload_receipt(
-    file: UploadFile = File(...),
-    session: Session = Depends(get_session),
-) -> ReceiptUploadResponse:
+async def _read_upload_file(file: UploadFile) -> tuple[str, bytes]:
     ext = Path(file.filename or "").suffix.lower()
     if ext not in _ALLOWED_EXT:
         raise HTTPException(status_code=400, detail=f"unsupported: {ext}")
+
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail=f"too large: {len(data)}")
 
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
-    safe_name = f"{stamp}{ext}"
-    saved_path = UPLOAD_DIR / safe_name
-    saved_path.write_bytes(data)
+    return ext, data
 
-    try:
-        bgr = load_image(data)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"decode failed: {e}") from e
 
-    preprocessed = preprocess_for_ocr(bgr)
-    raw_text = run_ocr(preprocessed)
-    fields = extract_receipt_fields(raw_text)
-
-    receipt_row = Receipt(filename=safe_name, ocr_text=raw_text, status="linked")
-    session.add(receipt_row)
-    session.flush()
+def _analyze_receipt(
+    *,
+    data: bytes,
+    ext: str,
+    session: Session,
+) -> ReceiptPreviewResponse:
+    """Run OCR/classification without writing image or OCR result to DB."""
 
     overrides = _load_overrides(session)
-    classification = classify_receipt(ReceiptInput(
-        merchantRaw=fields.merchant_raw,
-        items=fields.items,
-        totalAmount=fields.total_amount,
-        userCategoryOverrides=overrides if overrides else None,
-    ))
+    mime = _MIME_MAP.get(ext, "image/jpeg")
 
-    amount = fields.total_amount or 0
-    tax_rate = _tax_rate_for(classification.category, session)
-    tax_amt = calc_tax_amount(amount, tax_rate)
+    ocr_engine = "tesseract"
+    merchant_raw = ""
+    raw_text = ""
+    total_amount: int | None = None
+    purchased_at_val = date.today()
 
-    tx = Transaction(
-        merchant_raw=fields.merchant_raw,
-        merchant_normalized=classification.merchantNormalized,
-        items_text="|".join(fields.items),
-        screening_category=classification.category,
-        needs_review=classification.needsReview,
-        reason=classification.reason,
-        confidence=classification.confidence,
-        amount=amount,
-        tax_amount=tax_amt,
-        purchased_at=date.today(),
-        status="auto_saved",
-        ocr_raw_text=raw_text,
-        receipt_image_id=receipt_row.id,
+    # (name, amount, category, amount_extracted)
+    parsed_items: list[tuple[str, int, str | None, bool]] = []
+
+    gemini_ok = False
+
+    if is_gemini_available():
+        try:
+            g = extract_with_gemini(data, mime_type=mime)
+            ocr_engine = "gemini"
+            gemini_ok = True
+
+            merchant_raw = g.merchant or "(不明)"
+            raw_text = g.raw_json
+            total_amount = g.total_amount
+
+            if g.purchased_at:
+                purchased_at_val = g.purchased_at
+
+            for li in g.line_items:
+                parsed_items.append(
+                    (
+                        li.name,
+                        li.amount,
+                        li.category,
+                        li.amount > 0,
+                    )
+                )
+        except Exception as e:
+            # Fall back to Tesseract. The fallback result will become raw_text.
+            raw_text = f"[Gemini失敗→Tesseract] {e}"
+            gemini_ok = False
+
+    if not gemini_ok:
+        try:
+            bgr = load_image(data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"decode failed: {e}") from e
+
+        preprocessed = preprocess_for_ocr(bgr)
+        tess_text = run_ocr(preprocessed)
+        fields = extract_receipt_fields(tess_text)
+
+        ocr_engine = "tesseract"
+        merchant_raw = fields.merchant_raw
+        raw_text = tess_text
+        total_amount = fields.total_amount
+
+        if getattr(fields, "purchased_at", None):
+            purchased_at_val = fields.purchased_at
+
+        item_names = [li.name for li in fields.line_items]
+        line_classifications = classify_line_items(
+            item_names,
+            fields.merchant_raw,
+            overrides or None,
+        )
+
+        for ocr_item, line_classification in zip(fields.line_items, line_classifications):
+            amount = ocr_item.amount or 0
+            parsed_items.append(
+                (
+                    ocr_item.name,
+                    amount,
+                    line_classification.category,
+                    ocr_item.amount is not None,
+                )
+            )
+
+    item_name_list = [name for (name, _amount, _category, _extracted) in parsed_items]
+
+    classification = classify_receipt(
+        ReceiptInput(
+            merchantRaw=merchant_raw,
+            items=item_name_list,
+            totalAmount=total_amount,
+            userCategoryOverrides=overrides if overrides else None,
+        )
     )
-    session.add(tx)
-    session.commit()
-    session.refresh(tx)
 
-    return ReceiptUploadResponse(
-        transaction_id=tx.id,  # type: ignore
-        filename=safe_name,
+    header_category = classification.category
+
+    # If Gemini returned line item categories, prefer the category with largest amount.
+    if gemini_ok and parsed_items:
+        by_cat: dict[str, int] = {}
+        for (_name, amount, category, _extracted) in parsed_items:
+            if category:
+                by_cat[category] = by_cat.get(category, 0) + amount
+        if by_cat:
+            header_category = max(by_cat.items(), key=lambda item: item[1])[0]
+
+    amount = total_amount or sum(amount for (_name, amount, _category, _extracted) in parsed_items) or 0
+    tax_rate = _tax_rate_for(header_category, session)
+    tax_amount = calc_tax_amount(amount, tax_rate)
+
+    response_items = [
+        LineItemOut(
+            item=name,
+            amount=item_amount,
+            amount_extracted=extracted,
+            category=category,
+            reason=f"{ocr_engine}_extract",
+        )
+        for (name, item_amount, category, extracted) in parsed_items
+    ]
+
+    return ReceiptPreviewResponse(
+        ocr_engine=ocr_engine,
         raw_text=raw_text,
-        merchant_raw=fields.merchant_raw,
-        items=fields.items,
-        total_amount=fields.total_amount,
-        tax_amount=tax_amt,
+        merchant_raw=merchant_raw,
+        items=item_name_list,
+        total_amount=total_amount,
+        amount=amount,
+        tax_amount=tax_amount,
+        purchased_at=purchased_at_val,
         classification=classification.model_dump(),
+        line_items=response_items,
+        category=header_category,
+        needs_review=classification.needsReview,
+        confidence=classification.confidence,
+        reason=f"{ocr_engine}: {classification.reason}",
     )
+
+
+@router.post("/preview", response_model=ReceiptPreviewResponse)
+async def preview_receipt(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> ReceiptPreviewResponse:
+    """Run OCR/classification without saving image or plaintext records.
+
+    This endpoint is intended for E2E encryption flow:
+      frontend uploads image -> backend previews OCR -> frontend encrypts result
+      -> frontend stores encrypted payload via /api/encrypted-tx.
+    """
+
+    ext, data = await _read_upload_file(file)
+    return _analyze_receipt(data=data, ext=ext, session=session)

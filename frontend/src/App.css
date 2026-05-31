@@ -30,7 +30,7 @@ pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto;
 .tx-table tr.needs-review { background: #fff8e6; }
 .badge { display: inline-block; padding: 2px 6px; border-radius: 4px;
          font-size: 0.78em; margin-right: 4px; }
-.badge.auto { background: #ddf4ff; color: #0969da; }
+.badge.auto { background: #fff1c2; color: #9a6700; font-weight: bold; }
 .badge.ok { background: #dafbe1; color: #1a7f37; }
 .badge.review { background: #fff1c2; color: #9a6700; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5);
@@ -54,3 +54,44 @@ pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto;
   box-sizing: border-box;
 }
 .modal { max-width: 720px; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.two-col > .card { margin: 0; }
+@media (max-width: 720px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+.csv-preview { margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee; }
+.csv-preview code { background: #f6f8fa; padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+.app { max-width: 1100px; }
+
+.cashflow-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+.cashflow-item {
+  padding: 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+.cashflow-item .label {
+  font-size: 0.85em;
+  color: #57606a;
+  margin-bottom: 4px;
+}
+.cashflow-item .value {
+  font-size: 1.3em;
+  font-weight: bold;
+}
+.cashflow-item.income { background: #dafbe1; color: #1a7f37; }
+.cashflow-item.expense { background: #ffebe9; color: #cf222e; }
+.cashflow-item.balance.positive { background: #ddf4ff; color: #0969da; }
+.cashflow-item.balance.negative { background: #fff8c5; color: #9a6700; }
+@media (max-width: 720px) {
+  .cashflow-grid { grid-template-columns: 1fr; }
+}

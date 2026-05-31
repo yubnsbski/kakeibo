@@ -1,57 +1,178 @@
 import { useState } from "react";
-import { uploadReceipt } from "../api";
-import type { ReceiptUploadResponse } from "../types";
+import { previewReceipt } from "../api";
+import type { ReceiptPreviewResponse } from "../api";
+import { encryptJson, requireKey } from "../crypto";
+import { createEncryptedTx } from "../crypto/encryptedTxApi";
+import { CsvImportCard } from "./CsvImportCard";
 
-interface Props { onUploaded: () => void; }
+interface Props {
+  onUploaded: () => void;
+}
+
+type EncryptedOcrPayload = {
+  source: "receipt_ocr";
+  saved_mode: "encrypted";
+  version: 1;
+  preview: ReceiptPreviewResponse;
+};
 
 export function UploadView({ onUploaded }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<ReceiptUploadResponse | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<ReceiptPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit() {
-    if (!file) { setError("ファイル未選択"); return; }
-    setError(null); setBusy(true);
+  async function handlePreview() {
+    if (!file) {
+      setError("ファイル未選択");
+      return;
+    }
+
+    setError(null);
+    setBusy(true);
+
     try {
-      const r = await uploadReceipt(file);
-      setResult(r);
-    } catch (e) { setError(String(e)); }
-    finally { setBusy(false); }
+      const result = await previewReceipt(file);
+      setPreview(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleConfirmEncryptedSave() {
+    if (!preview) {
+      setError("OCR結果がありません");
+      return;
+    }
+
+    setError(null);
+    setSaving(true);
+
+    try {
+      const payload: EncryptedOcrPayload = {
+        source: "receipt_ocr",
+        saved_mode: "encrypted",
+        version: 1,
+        preview,
+      };
+
+      const encryptedRecord = await encryptJson(requireKey(), payload);
+      await createEncryptedTx(JSON.stringify(encryptedRecord), 1);
+
+      setFile(null);
+      setPreview(null);
+      onUploaded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="card">
-      <h2>レシート画像アップロード</h2>
-      <p className="hint">送信すると OCR・分類・DB保存まで自動です。確認は「一覧」タブから。</p>
-      <input type="file" accept="image/*" onChange={(e) => {
-        setFile(e.target.files?.[0] || null); setResult(null);
-      }} />
-      <button onClick={handleSubmit} disabled={busy || !file}>
-        {busy ? "処理中..." : "送信"}
-      </button>
-      {error && <p className="err">{error}</p>}
-      {result && (
-        <div className="result">
-          <h3>保存完了 (取引ID: {result.transaction_id})</h3>
-          <table>
-            <tbody>
-              <tr><th>店舗名</th><td>{result.merchant_raw || "(空)"}</td></tr>
-              <tr><th>明細</th><td>{result.items.join(" / ") || "(空)"}</td></tr>
-              <tr><th>合計(税込)</th><td>{result.total_amount?.toLocaleString() || "(検出失敗)"}円</td></tr>
-              <tr><th>税額</th><td>{result.tax_amount.toLocaleString()}円</td></tr>
-              <tr><th>カテゴリ</th><td>{result.classification.category || "(未分類)"}</td></tr>
-              <tr><th>needs_review</th><td>{String(result.classification.needsReview)}</td></tr>
-              <tr><th>理由</th><td>{result.classification.reason}</td></tr>
-            </tbody>
-          </table>
-          <details>
-            <summary>OCR raw text</summary>
-            <pre>{result.raw_text}</pre>
-          </details>
-          <button onClick={onUploaded}>一覧で確認・編集する</button>
+    <div className="two-col">
+      <div className="card">
+        <h2>レシートOCR取込</h2>
+
+        <p className="hint">
+          画像はOCR確認用に送信されます。preview endpointでは画像・OCR結果・取引をDB保存しません。
+          内容を確認してから暗号化保存します。
+        </p>
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] || null);
+            setPreview(null);
+            setError(null);
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          <button onClick={handlePreview} disabled={busy || saving || !file}>
+            {busy ? "OCR中..." : "OCRして確認"}
+          </button>
+
+          <button
+            onClick={handleConfirmEncryptedSave}
+            disabled={busy || saving || !preview}
+          >
+            {saving ? "暗号化保存中..." : "確認して暗号化保存"}
+          </button>
         </div>
-      )}
+
+        {error && <p className="err">{error}</p>}
+
+        {preview && (
+          <div className="result">
+            <h3>OCR確認</h3>
+
+            <table>
+              <tbody>
+                <tr>
+                  <th>店舗</th>
+                  <td>{preview.merchant_raw || "(空)"}</td>
+                </tr>
+                <tr>
+                  <th>日付</th>
+                  <td>{preview.purchased_at}</td>
+                </tr>
+                <tr>
+                  <th>合計(税込)</th>
+                  <td>{preview.amount.toLocaleString()}円</td>
+                </tr>
+                <tr>
+                  <th>税額</th>
+                  <td>{preview.tax_amount.toLocaleString()}円</td>
+                </tr>
+                <tr>
+                  <th>カテゴリ</th>
+                  <td>{preview.category || "(未分類)"}</td>
+                </tr>
+                <tr>
+                  <th>要確認</th>
+                  <td>{preview.needs_review ? "はい" : "いいえ"}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4>明細</h4>
+            {preview.line_items.length === 0 ? (
+              <p className="hint">明細は検出されませんでした。</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>品目</th>
+                    <th>金額</th>
+                    <th>カテゴリ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.line_items.map((item, index) => (
+                    <tr key={`${item.item}-${index}`}>
+                      <td>{item.item}</td>
+                      <td>{item.amount.toLocaleString()}円</td>
+                      <td>{item.category || "(未分類)"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <p className="hint">
+              内容に問題なければ「確認して暗号化保存」を押してください。
+              保存後は encrypted_transactions に暗号文として保存されます。
+            </p>
+          </div>
+        )}
+      </div>
+
+      <CsvImportCard onImported={onUploaded} />
     </div>
   );
 }
