@@ -6,6 +6,8 @@ from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
+from .calculation import calc_tax_amount
+
 
 class UserCategoryOverride(SQLModel, table=True):
     __tablename__ = "user_category_overrides"
@@ -44,9 +46,3 @@ class CategoryMasterRead(SQLModel):
     tax_rate: int
     sort_order: int
     is_income: bool
-
-
-def calc_tax_amount(amount_incl_tax: int, tax_rate: int) -> int:
-    if amount_incl_tax <= 0 or tax_rate <= 0:
-        return 0
-    return round(amount_incl_tax * tax_rate / (100 + tax_rate))

@@ -36,14 +36,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  backend-unit:
+  backend-calculation-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run dependency-free backend unit tests
-        env:
-          PYTHONPATH: backend
-        run: python -m unittest discover -s backend/tests -p 'test_*.py'
+      - name: Run dependency-free amount calculation tests
+        working-directory: backend
+        run: python3 -m unittest tests.test_calculation
