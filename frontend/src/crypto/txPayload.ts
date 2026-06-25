@@ -19,7 +19,10 @@ export type ManualEncryptedPayload = {
   date: string;
   tx_type: TxType;
   merchant: string;
+  amount_expression?: string;
   amount: number;
+  tax_rate?: number;
+  tax_amount?: number;
   category: string;
   memo: string;
   payment_method: ManualNoReceiptKind;
@@ -33,7 +36,9 @@ export type ReceiptOcrEncryptedPayload = {
   preview: {
     purchased_at: string;
     merchant_raw: string;
+    amount_expression?: string;
     amount: number;
+    tax_rate?: number;
     tax_amount: number;
     category: string | null;
     raw_text?: string;
@@ -53,7 +58,10 @@ export type NormalizedEncryptedTx = {
   date: string;
   tx_type: TxType;
   merchant: string;
+  amount_expression?: string;
   amount: number;
+  tax_rate?: number;
+  tax_amount?: number;
   category: string;
   memo: string;
   source: "manual" | "receipt_ocr";
@@ -75,7 +83,10 @@ export function normalizeEncryptedPayload(
       date: payload.preview.purchased_at,
       tx_type: "expense",
       merchant: payload.preview.merchant_raw || "(不明)",
+      amount_expression: payload.preview.amount_expression,
       amount: payload.preview.amount,
+      tax_rate: payload.preview.tax_rate,
+      tax_amount: payload.preview.tax_amount,
       category: payload.preview.category || "未分類",
       memo: `OCR明細 ${lineItems.length}件`,
       source: "receipt_ocr",
@@ -87,7 +98,10 @@ export function normalizeEncryptedPayload(
     date: payload.date,
     tx_type: payload.tx_type,
     merchant: payload.merchant || "(手入力)",
+    amount_expression: payload.amount_expression,
     amount: payload.amount,
+    tax_rate: payload.tax_rate,
+    tax_amount: payload.tax_amount,
     category: payload.category || "未分類",
     memo: payload.memo || "",
     source: "manual",

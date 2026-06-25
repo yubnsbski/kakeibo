@@ -120,16 +120,20 @@ export function UploadView({ onUploaded }: Props) {
                 <td>{preview.purchased_at}</td>
               </tr>
               <tr>
-                <th>合計(税込)</th>
+                <th>カテゴリ</th>
+                <td>{preview.category || "(未分類)"}</td>
+              </tr>
+              <tr>
+                <th>値段(税込)</th>
                 <td>{preview.amount.toLocaleString()}円</td>
+              </tr>
+              <tr>
+                <th>税率</th>
+                <td>{preview.tax_rate}%</td>
               </tr>
               <tr>
                 <th>税額</th>
                 <td>{preview.tax_amount.toLocaleString()}円</td>
-              </tr>
-              <tr>
-                <th>カテゴリ</th>
-                <td>{preview.category || "(未分類)"}</td>
               </tr>
               <tr>
                 <th>要確認</th>
@@ -146,16 +150,16 @@ export function UploadView({ onUploaded }: Props) {
               <thead>
                 <tr>
                   <th>品目</th>
-                  <th>金額</th>
                   <th>カテゴリ</th>
+                  <th>値段</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.line_items.map((item, index) => (
                   <tr key={`${item.item}-${index}`}>
                     <td>{item.item}</td>
-                    <td>{item.amount.toLocaleString()}円</td>
                     <td>{item.category || "(未分類)"}</td>
+                    <td>{item.amount.toLocaleString()}円</td>
                   </tr>
                 ))}
               </tbody>

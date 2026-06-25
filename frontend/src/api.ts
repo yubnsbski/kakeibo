@@ -1,7 +1,26 @@
 const BASE = "/api";
 
+async function responseErrorMessage(r: Response): Promise<string> {
+  const text = await r.text();
+  if (!text) return `HTTP ${r.status}`;
+
+  try {
+    const body = JSON.parse(text) as {
+      detail?: string | { message?: string };
+    };
+    if (typeof body.detail === "string") return body.detail;
+    if (body.detail?.message) return body.detail.message;
+  } catch {
+    // Fall through to the original response text.
+  }
+
+  return text;
+}
+
 async function handle<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    throw new Error(`${r.status}: ${await responseErrorMessage(r)}`);
+  }
   return r.json() as Promise<T>;
 }
 
@@ -43,6 +62,27 @@ export async function commitCsv(file: File): Promise<CsvCommitResponse> {
   return handle<CsvCommitResponse>(r);
 }
 
+export interface AmountCalculationResponse {
+  amount: number;
+  tax_rate: number;
+  tax_amount: number;
+}
+
+export async function calculateAmount(
+  expression: string,
+  taxRate: number,
+): Promise<AmountCalculationResponse> {
+  const r = await fetch(`${BASE}/calculations/amount`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      expression,
+      tax_rate: taxRate,
+    }),
+  });
+  return handle<AmountCalculationResponse>(r);
+}
+
 export interface ReceiptPreviewLineItem {
   item: string;
   amount: number;
@@ -58,6 +98,7 @@ export interface ReceiptPreviewResponse {
   items: string[];
   total_amount: number | null;
   amount: number;
+  tax_rate: number;
   tax_amount: number;
   purchased_at: string;
   classification: Record<string, unknown>;

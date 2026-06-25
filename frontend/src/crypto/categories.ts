@@ -43,6 +43,19 @@ export function normalizeCategory(category: string | null | undefined): string {
 }
 
 /**
+ * 手入力時の初期税率。
+ * 収入は0%、軽減税率対象として扱う食費は8%、その他の支出は10%。
+ * 酒類・外食など旧カテゴリは食費に含めず10%になる。
+ */
+export function defaultTaxRate(
+  txType: "expense" | "income",
+  category: string | null | undefined,
+): number {
+  if (txType === "income") return 0;
+  return normalizeCategory(category) === "食費" ? 8 : 10;
+}
+
+/**
  * カテゴリ選択肢を返す。
  * 既存データに、現在の選択肢に無いカテゴリ（旧カテゴリなど）が
  * 入っている場合、その値を先頭に追加して選択可能にする。
