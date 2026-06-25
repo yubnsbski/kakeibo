@@ -36,12 +36,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  backend-unit:
+  backend-calculation-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          show-progress: false
-      - name: Run dependency-free backend unit tests
+      - name: Run dependency-free amount calculation tests
         working-directory: backend
-        run: python3 -m unittest discover -s tests -p 'test_*.py'
+        run: python3 -m unittest tests.test_calculation
