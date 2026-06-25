@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -65,6 +65,7 @@ class ReceiptPreviewResponse(BaseModel):
     items: list[str]
     total_amount: int | None
     amount: int
+    tax_rate: int
     tax_amount: int
     purchased_at: date
     classification: dict
@@ -208,7 +209,11 @@ def _analyze_receipt(
         if by_cat:
             header_category = max(by_cat.items(), key=lambda item: item[1])[0]
 
-    amount = total_amount or sum(amount for (_name, amount, _category, _extracted) in parsed_items) or 0
+    amount = (
+        total_amount
+        or sum(item_amount for (_name, item_amount, _category, _extracted) in parsed_items)
+        or 0
+    )
     tax_rate = _tax_rate_for(header_category, session)
     tax_amount = calc_tax_amount(amount, tax_rate)
 
@@ -230,6 +235,7 @@ def _analyze_receipt(
         items=item_name_list,
         total_amount=total_amount,
         amount=amount,
+        tax_rate=tax_rate,
         tax_amount=tax_amount,
         purchased_at=purchased_at_val,
         classification=classification.model_dump(),
