@@ -21,10 +21,10 @@ printf '\n[2/4] フロントエンド本番ビルド\n'
   npm run build
 )
 
-printf '\n[3/4] バックエンド演算テスト\n'
+printf '\n[3/4] バックエンド全テスト\n'
 (
   cd "$ROOT_DIR/backend"
-  "$PYTHON" -m unittest tests.test_calculation
+  "$PYTHON" -m unittest discover -s tests -p 'test_*.py'
 )
 
 printf '\n[4/4] バックエンド起動モジュール import\n'
