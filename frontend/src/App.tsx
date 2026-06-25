@@ -3,14 +3,11 @@ import "./App.css";
 import { UploadView } from "./components/UploadView";
 import { CryptoGate } from "./crypto/ui/CryptoGate";
 import { EncryptedTxView } from "./crypto/ui/EncryptedTxView";
+import { EncryptedSummaryView } from "./crypto/ui/EncryptedSummaryView";
 import { EncryptedGraphView } from "./crypto/ui/EncryptedGraphView";
 import "./crypto/crypto-ui.css";
 
-type Tab =
-  | "upload"
-  | "list"
-  | "graph"
-;
+type Tab = "upload" | "list" | "summary" | "graph";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("upload");
@@ -35,6 +32,12 @@ export default function App() {
               一覧
             </button>
             <button
+              className={tab === "summary" ? "active" : ""}
+              onClick={() => setTab("summary")}
+            >
+              集計
+            </button>
+            <button
               className={tab === "graph" ? "active" : ""}
               onClick={() => setTab("graph")}
             >
@@ -47,15 +50,17 @@ export default function App() {
           {tab === "upload" && (
             <UploadView
               onUploaded={() => {
-                setRefreshKey((k) => k + 1);
+                setRefreshKey((key) => key + 1);
                 setTab("list");
               }}
             />
           )}
 
           {tab === "list" && <EncryptedTxView refreshKey={refreshKey} />}
+          {tab === "summary" && (
+            <EncryptedSummaryView refreshKey={refreshKey} />
+          )}
           {tab === "graph" && <EncryptedGraphView refreshKey={refreshKey} />}
-
         </main>
       </div>
     </CryptoGate>
