@@ -36,6 +36,7 @@ export type ReceiptOcrEncryptedPayload = {
   preview: {
     purchased_at: string;
     merchant_raw: string;
+    amount_expression?: string;
     amount: number;
     tax_rate?: number;
     tax_amount: number;
@@ -82,6 +83,7 @@ export function normalizeEncryptedPayload(
       date: payload.preview.purchased_at,
       tx_type: "expense",
       merchant: payload.preview.merchant_raw || "(不明)",
+      amount_expression: payload.preview.amount_expression,
       amount: payload.preview.amount,
       tax_rate: payload.preview.tax_rate,
       tax_amount: payload.preview.tax_amount,
