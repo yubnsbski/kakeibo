@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import create_db_and_tables
 from .routers import (
+    calculations,
     crypto_config,
     csv_import,
     encrypted_tx,
@@ -27,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="kakeibo API",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -58,6 +59,7 @@ def health() -> dict[str, str]:
 # API routers must be registered before StaticFiles.
 app.include_router(receipts.router)
 app.include_router(csv_import.router)
+app.include_router(calculations.router)
 
 # E2E encryption routers.
 app.include_router(crypto_config.router)
