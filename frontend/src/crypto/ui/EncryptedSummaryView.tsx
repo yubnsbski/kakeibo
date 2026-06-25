@@ -113,6 +113,12 @@ export function EncryptedSummaryView({
     }
   }
 
+  function updateDay(value: string) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      setAnchorDate(value);
+    }
+  }
+
   function updateMonth(value: string) {
     if (/^\d{4}-\d{2}$/.test(value)) {
       setAnchorDate(`${value}-01`);
@@ -162,7 +168,7 @@ export function EncryptedSummaryView({
             <input
               type="date"
               value={anchorDate}
-              onChange={(event) => setAnchorDate(event.target.value)}
+              onChange={(event) => updateDay(event.target.value)}
             />
           </label>
         )}
