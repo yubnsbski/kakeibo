@@ -1,13 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(git rev-parse --show-toplevel)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="$ROOT_DIR/backend/.venv/bin/python"
 
-cd "$repo_root"
-npm run verify
+if [[ ! -x "$PYTHON" ]]; then
+  echo "backend/.venv がありません。先に bash scripts/setup_local.sh を実行してください。" >&2
+  exit 1
+fi
 
-cd "$repo_root/frontend"
-npm run build
+printf '\n[1/4] ルート TypeScript 型検査・テスト\n'
+(
+  cd "$ROOT_DIR"
+  npm run verify
+)
 
-cd "$repo_root/backend"
-python3 -m unittest tests.test_calculation
+printf '\n[2/4] フロントエンド本番ビルド\n'
+(
+  cd "$ROOT_DIR/frontend"
+  npm run build
+)
+
+printf '\n[3/4] バックエンド演算テスト\n'
+(
+  cd "$ROOT_DIR/backend"
+  "$PYTHON" -m unittest tests.test_calculation
+)
+
+printf '\n[4/4] バックエンド起動モジュール import\n'
+(
+  cd "$ROOT_DIR/backend"
+  "$PYTHON" -c 'from app.main import app; assert app.title == "kakeibo API"'
+)
+
+printf '\n全検証が完了しました。\n'
