@@ -1,71 +1,62 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
-REPO=/workspaces/kakeibo
-cd "$REPO"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="$ROOT_DIR/backend/.venv/bin/python"
+VITE="$ROOT_DIR/frontend/node_modules/.bin/vite"
 
-echo "============================================================"
-echo "[1/6] 既存プロセス停止"
-echo "============================================================"
-pkill -9 -f uvicorn 2>/dev/null || true
-pkill -9 -f vite 2>/dev/null || true
-pkill -9 -f "node.*vite" 2>/dev/null || true
-sleep 2
+if [[ ! -x "$PYTHON" || ! -x "$VITE" ]]; then
+  echo "依存関係が不足しています。先に bash scripts/setup_local.sh を実行してください。" >&2
+  exit 1
+fi
 
-echo
-echo "============================================================"
-echo "[2/6] frontend proxy 確認"
-echo "============================================================"
-grep -n "target:" "$REPO/frontend/vite.config.ts" || true
+BACKEND_PID=""
+FRONTEND_PID=""
 
-echo
-echo "============================================================"
-echo "[3/6] backend 起動 :8000"
-echo "============================================================"
-(cd "$REPO/backend" && nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &)
-sleep 5
+cleanup() {
+  local exit_code=$?
+  trap - EXIT INT TERM
 
-echo
-echo "============================================================"
-echo "[4/6] frontend 起動 :5173"
-echo "============================================================"
-(cd "$REPO/frontend" && nohup npm run dev -- --host 0.0.0.0 > /tmp/vite.log 2>&1 &)
-sleep 8
+  if [[ -n "$FRONTEND_PID" ]]; then
+    kill "$FRONTEND_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$BACKEND_PID" ]]; then
+    kill "$BACKEND_PID" 2>/dev/null || true
+  fi
 
-echo
-echo "============================================================"
-echo "[5/6] LISTEN 確認"
-echo "============================================================"
-ss -tlnp 2>&1 | grep -E ":5173|:8000" || echo "(LISTEN なし)"
+  [[ -z "$FRONTEND_PID" ]] || wait "$FRONTEND_PID" 2>/dev/null || true
+  [[ -z "$BACKEND_PID" ]] || wait "$BACKEND_PID" 2>/dev/null || true
+  exit "$exit_code"
+}
 
-echo
-echo "============================================================"
-echo "[6/6] API確認"
-echo "============================================================"
+trap cleanup EXIT INT TERM
 
-echo
-echo "--- backend health ---"
-curl -i http://127.0.0.1:8000/api/health || true
+cat <<'EOF'
+Backend : http://127.0.0.1:8000
+Frontend: http://127.0.0.1:5173
+停止    : Ctrl-C
+EOF
 
-echo
-echo "--- backend crypto config GET ---"
-curl -i http://127.0.0.1:8000/api/crypto/config || true
+(
+  cd "$ROOT_DIR/backend"
+  exec "$PYTHON" -m uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000
+) &
+BACKEND_PID=$!
 
-echo
-echo "--- vite root ---"
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5173/ || true
+(
+  cd "$ROOT_DIR/frontend"
+  exec "$VITE" \
+    --host 127.0.0.1 \
+    --port 5173 \
+    --strictPort
+) &
+FRONTEND_PID=$!
 
-echo
-echo "--- vite proxy health ---"
-curl -i http://127.0.0.1:5173/api/health || true
+while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do
+  sleep 1
+done
 
-echo
-echo "--- vite proxy crypto config GET ---"
-curl -i http://127.0.0.1:5173/api/crypto/config || true
-
-echo
-echo "============================================================"
-echo "ログ確認:"
-echo "  tail -80 /tmp/uvicorn.log"
-echo "  tail -80 /tmp/vite.log"
-echo "============================================================"
+echo "バックエンドまたはフロントエンドが停止しました。上のログを確認してください。" >&2
+exit 1
