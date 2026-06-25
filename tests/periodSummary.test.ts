@@ -16,14 +16,14 @@ type TestRow = {
 };
 
 type PeriodSummaryModule = typeof import(
-  "../frontend/src/crypto/periodSummary"
+  "../frontend/src/crypto/periodSummary.js"
 );
 
 let summarizeByCategory: PeriodSummaryModule["summarizeByCategory"];
 
 beforeAll(async () => {
   ({ summarizeByCategory } = await import(
-    "../frontend/src/crypto/periodSummary"
+    "../frontend/src/crypto/periodSummary.js"
   ));
 });
 
