@@ -1,104 +1,139 @@
 # AGENTS.md
 
-## 目的
-家計簿アプリ向けのレシート分類エンジンだけを作る。
+## Scope
 
-## 今回作るもの
-- 店舗名正規化
-- カテゴリ分類
-- confidence算出
-- needs_review判定
-- unit test
-- 明細キーワード自動抽出（ラベル付き学習データからの統計的マイニング）
+This file applies to the entire repository. The project is no longer classifier-only; it contains a TypeScript classifier, a Python mirror, a React/Vite frontend, and a FastAPI/SQLite backend.
 
-## 今回作らないもの
-- OCR
-- 画像アップロード
-- DB
-- ログイン
-- UI
-- 外部API接続
-- 学習済みモデルの永続化（rules.ts への自動上書きは禁止、候補出力のみ）
+When a task conflicts with an older component document, verify the current code and this file first. Do not follow historical statements that UI, OCR, database, or API code does not exist.
 
-## 分類ルール
-優先順位:
-1. ユーザー修正ルール
-2. 店舗名ルール
-3. 明細キーワードルール
-4. 曖昧店舗判定
-5. 要確認
+## Architecture
 
-## 危険店舗
-以下は店舗名だけで分類確定しない:
-- Amazon
-- 楽天
-- イオン
-- ドン・キホーテ
-- メルカリ
+- `src/`, `tests/`, `fixtures/`: pure TypeScript receipt classification and evaluation.
+- `python/`: standard-library Python mirror of the classifier.
+- `frontend/`: React/Vite UI. Transaction JSON is encrypted and decrypted in the browser.
+- `backend/`: FastAPI, SQLModel, SQLite, OCR preview, encrypted payload persistence, and safe amount calculation.
+- `backend/app/crypto_models.py`: server-side models for salt/configuration and opaque encrypted transactions.
+- `frontend/src/crypto/txPayload.ts`: encrypted payload types and backward-compatible normalization.
+- `frontend/src/crypto/periodSummary.ts`: day/month/year category aggregation.
+- `backend/app/calculation.py`: allowed arithmetic grammar and tax calculation.
 
-明細がなければ needs_review=true にする。
+## Required invariants
 
-## 禁止事項
-- .envを作らない
-- APIキーを扱わない
-- DB migrationを作らない
-- OCR APIを呼ばない
-- 依存パッケージを勝手に追加しない
+### Encryption and privacy
 
-## テスト
+- The server must not interpret or log `encrypted_payload`.
+- Merchant, category, memo, receipt text, line items, passphrase, and derived keys remain browser-side plaintext only.
+- `/api/calculations/amount` receives only an amount expression and tax rate.
+- `/api/receipts/preview` may process an uploaded image, but must not persist the image, OCR text, or plaintext transaction.
+- Never commit `.env`, API keys, database files, uploaded receipt images, handoff files, or decrypted data.
+- A lost passphrase cannot be recovered by the server. Do not imply otherwise.
+
+### Payload compatibility
+
+- Existing encrypted payload version 1 records may not contain `amount_expression`, `tax_rate`, or `tax_amount`.
+- Additive fields must remain optional unless a versioned migration and migration tests are supplied.
+- Never rewrite all encrypted records implicitly during display or aggregation.
+
+### Amount expressions and tax
+
+- Do not use `eval`, `exec`, JavaScript `Function`, shell evaluation, or third-party expression evaluators for user input.
+- The accepted grammar is decimal numbers, `+`, `-`, `*`, `/`, unary signs, and parentheses.
+- Keep validation for unknown characters, length, nesting depth, division by zero, finite results, positive yen results, and tax-rate range.
+- Keep yen rounding and included-tax rounding covered by tests.
+- Default tax rates are UI defaults, not legal classification. Users must be able to correct them.
+
+### Aggregation
+
+- Count each transaction amount exactly once.
+- Use line-item categories only when every line-item amount is valid and their sum equals the transaction amount.
+- Otherwise use the transaction-level category and amount, and surface the fallback count.
+- Invalid dates and decryption failures must be excluded visibly rather than silently converted.
+
+### Categories
+
+- Category vocabularies are not fully unified across the frontend, legacy CSV/backend code, and historical encrypted records.
+- Do not silently rename historical categories or assume two labels are equivalent without an explicit mapping and tests.
+- Preserve unknown historical categories in edit controls.
+
+## Classification rules
+
+For classifier changes, also read `docs/classification-policy.md` and preserve this priority:
+
+1. user correction rule
+2. merchant rule
+3. line-item keyword rule
+4. ambiguous merchant handling
+5. review fallback
+
+Amazon, Rakuten, Aeon, Don Quijote, Mercari, and comparable marketplaces must not be finalized from merchant name alone when line-item evidence is absent.
+
+Keyword mining may emit candidates, but must not overwrite `src/rules.ts` automatically. Review candidates and compare evaluation results before applying them.
+
+## Small-sprint workflow
+
+1. Read the relevant implementation, tests, `docs/danger-points.md`, and current Git state.
+2. State one primary risk cluster, target files, compatibility impact, and validation commands.
+3. Create a branch from current `main`.
+4. Implement the smallest complete vertical slice.
+5. Review the full diff for privacy leaks, schema drift, double counting, stale generated files, and unrelated edits.
+6. Run the narrow test while editing, then the repository verification before opening or merging a pull request.
+7. Open a pull request with purpose, behavior, privacy boundary, compatibility, tests, and remaining risks.
+8. Squash merge only after all required CI jobs succeed.
+
+Do not discard, reset, clean, or automatically stash a user's local changes.
+
+## Setup and verification
+
+First setup:
+
+```bash
+bash scripts/setup_local.sh
+```
+
+Optional Gemini OCR SDK:
+
+```bash
+bash scripts/setup_local.sh --with-gemini
+```
+
+Full local verification:
+
+```bash
+bash scripts/verify_local.sh
+```
+
+Useful narrow checks:
+
+```bash
+npm run typecheck
 npm test
+cd frontend && npm run build
+cd backend && .venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+```
 
-## 機械学習（明細キーワード自動抽出）
-- 学習データ: `fixtures/training/labeled-items.json`（明細×カテゴリのラベル付き）
-- 抽出ロジック: `src/keywordMiner.ts`（純TypeScript・依存追加なし・文字n-gram統計）
-- 実行: `npm run mine-keywords`（候補をstdout出力するのみ）
-- `src/rules.ts` への反映は人手レビュー後に手動で行う
+Local start:
 
-## 評価ハーネス
-- ロジック: `src/evaluate.ts`（receipt単位 / item単位）
-- 実行: `npm run evaluate`
-- 鉱出キーワード適用前後の精度差をレポートする
-- ルール変更時は前後で評価を取り、回帰がないか確認する
+```bash
+bash scripts/start.sh
+```
 
-## フィードバックループ（学習データ取り込み）
-- `toLabeledExamples`: 手動確認済みレビュー結果を学習データ形式に変換
-- `mergeLabeledExamples`: 既存の `labeled-items.json` と source 単位でマージ
-- 自動ファイル書き込みはしない（呼び出し側が JSON.stringify して書く）
-- ループ: needs_review 確認 → ConfirmedItem 化 → merge → mine-keywords → evaluate
+## Dependency changes
 
-## Python実装
-- 場所: `python/` (TS実装と並行する1:1ミラー)
-- 依存: pure stdlib のみ（unittest）
-- 拡張: `rules.py` に seed lexicon を追加し、明細精度 100% (22/22) 達成
-- テスト: `cd python && python3 -m unittest discover -s tests`
-- CLI: `python3 -m kakeibo.cli mine-keywords` / `python3 -m kakeibo.cli evaluate`
-- 精度ガード: `test_baseline_accuracy_meets_90_percent` が >= 90% を強制
-- fixtures は `python/fixtures` → `../fixtures` の symlink でTS実装と共有
+- Explain why a dependency is needed and whether it is runtime or optional.
+- Pin backend direct dependencies in `backend/requirements.txt` or `backend/requirements-gemini.txt`.
+- Keep `package-lock.json` files synchronized with their `package.json` files.
+- Validate backend application import in CI after dependency changes.
+- Tesseract's Python wrapper is not the OCR engine binary; document the system package separately.
 
-## 明細単位分類
-- `classifyItem`: 単一明細を分類（最長一致 + 実行時キーワード注入 + 税率ヒント）
-- `classifyReceiptBreakdown`: レシート明細ごとに分類し isMixed / dominantCategory を返す
-- `allocateAmountsByCategory`: 混在レシートをカテゴリ別金額に按分する
-- `runBreakdownClassificationFromCsvRows`: CSVバッチ入力をカテゴリ別行に展開
-- 税率ヒント: `perItemTaxRateHints` で「軽」マーカー由来の食費フォールバックを有効化
+## AI continuation
 
-## Environment Rules
+Before changing tools or reaching a usage limit:
 
-Before implementation:
-- Read docs/classification-policy.md
-- Read docs/danger-points.md
-- Run npm run verify if code is changed
+```bash
+bash scripts/verify_local.sh
+bash scripts/create_handoff.sh
+```
 
-Do not:
-- Add OCR API
-- Add database
-- Add authentication
-- Add UI
-- Add network access
-- Add production dependencies without explanation
+Update the generated `AI_HANDOFF.local.md` with the current task, acceptance conditions, validation result, branch/PR state, unresolved risks, and next smallest action. Review it before sharing because filenames and commit messages are included.
 
-When editing:
-- First explain the implementation plan
-- List target files before changing them
-- Keep changes limited to classifier logic, tests, fixtures, and docs
-- Run npm run verify after changes
+The reusable workflow is defined in `.claude/skills/kakeibo-small-sprint/SKILL.md`.
