@@ -87,6 +87,16 @@ function parseTaxRate(value: string): number {
   return parsed;
 }
 
+async function calculateExpression(
+  expression: string,
+  taxRateValue: string,
+): Promise<AmountCalculationResponse> {
+  if (!expression.trim()) {
+    throw new Error("値段式を入力してください");
+  }
+  return calculateAmount(expression, parseTaxRate(taxRateValue));
+}
+
 function yen(value: number | undefined): string {
   return typeof value === "number" && Number.isFinite(value)
     ? `${value.toLocaleString()}円`
@@ -135,6 +145,7 @@ function buildPayloadFromEdit(
         ...edit.payload.preview,
         purchased_at: edit.date,
         merchant_raw: edit.merchant,
+        amount_expression: edit.amount_expression.trim(),
         amount: calculation.amount,
         tax_rate: calculation.tax_rate,
         tax_amount: calculation.tax_amount,
@@ -240,8 +251,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
     setSaving(true);
 
     try {
-      const parsedTaxRate = parseTaxRate(taxRate);
-      const calculation = await calculateAmount(amountExpression, parsedTaxRate);
+      const calculation = await calculateExpression(amountExpression, taxRate);
       const normalizedCategory = normalizeCategory(category);
 
       const payload: ManualEncryptedPayload = {
@@ -317,7 +327,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
   }
 
   function changeEditingTxType(nextType: TxType) {
-    if (!editing) return;
+    if (!editing || editing.payload.source === "receipt_ocr") return;
     const nextCategory = categoryOptions(nextType)[0] ?? "未分類";
     setEditing({
       ...editing,
@@ -343,10 +353,9 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
     setSaving(true);
 
     try {
-      const parsedTaxRate = parseTaxRate(editing.tax_rate);
-      const calculation = await calculateAmount(
+      const calculation = await calculateExpression(
         editing.amount_expression,
-        parsedTaxRate,
+        editing.tax_rate,
       );
       const updatedPayload = buildPayloadFromEdit(editing, calculation);
       const encryptedRecord = await encryptJson(requireKey(), updatedPayload);
@@ -453,7 +462,6 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           <input
             value={amountExpression}
             placeholder="例: (1200 + 300) / 2"
-            inputMode="decimal"
             onChange={(e) => setAmountExpression(e.target.value)}
           />
         </label>
@@ -479,7 +487,14 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           {saving ? "処理中..." : "手入力を暗号化保存"}
         </button>
 
-        <button onClick={() => void loadRows()} disabled={saving}>
+        <button
+          onClick={() =>
+            void loadRows().catch((e) =>
+              setMessage(e instanceof Error ? e.message : String(e)),
+            )
+          }
+          disabled={saving}
+        >
           再読み込み
         </button>
       </div>
@@ -506,6 +521,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               種別
               <select
                 value={editing.tx_type}
+                disabled={editing.payload.source === "receipt_ocr"}
                 onChange={(e) =>
                   changeEditingTxType(e.target.value as TxType)
                 }
@@ -513,23 +529,28 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                 <option value="expense">支出</option>
                 <option value="income">収入</option>
               </select>
+              {editing.payload.source === "receipt_ocr" && (
+                <span className="hint">OCR取引は支出として固定されます。</span>
+              )}
             </label>
 
-            <label>
-              種類
-              <select
-                value={editing.payment_method}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    payment_method: e.target.value as ManualNoReceiptKind,
-                  })
-                }
-              >
-                <option value="cash">現金</option>
-                <option value="other">その他</option>
-              </select>
-            </label>
+            {editing.payload.source === "manual" && (
+              <label>
+                種類
+                <select
+                  value={editing.payment_method}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      payment_method: e.target.value as ManualNoReceiptKind,
+                    })
+                  }
+                >
+                  <option value="cash">現金</option>
+                  <option value="other">その他</option>
+                </select>
+              </label>
+            )}
 
             <label>
               店舗・相手先
@@ -562,7 +583,6 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               値段（税込・四則演算と括弧が使用可能）
               <input
                 value={editing.amount_expression}
-                inputMode="decimal"
                 onChange={(e) =>
                   setEditing({
                     ...editing,
