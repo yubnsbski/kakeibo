@@ -2,7 +2,7 @@ import { useState } from "react";
 import "./App.css";
 import { UploadView } from "./components/UploadView";
 import { CryptoGate } from "./crypto/ui/CryptoGate";
-import { EncryptedTxView } from "./crypto/ui/EncryptedTxView";
+import { TaxAwareEncryptedTxView } from "./crypto/ui/TaxAwareEncryptedTxView";
 import { EncryptedSummaryView } from "./crypto/ui/EncryptedSummaryView";
 import { EncryptedGraphView } from "./crypto/ui/EncryptedGraphView";
 import "./crypto/crypto-ui.css";
@@ -56,7 +56,9 @@ export default function App() {
             />
           )}
 
-          {tab === "list" && <EncryptedTxView refreshKey={refreshKey} />}
+          {tab === "list" && (
+            <TaxAwareEncryptedTxView refreshKey={refreshKey} />
+          )}
           {tab === "summary" && (
             <EncryptedSummaryView refreshKey={refreshKey} />
           )}
