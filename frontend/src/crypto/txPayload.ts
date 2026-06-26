@@ -1,3 +1,5 @@
+import type { AmountMode } from "../api";
+
 export type TxType = "expense" | "income";
 
 export type ManualNoReceiptKind =
@@ -20,7 +22,9 @@ export type ManualEncryptedPayload = {
   tx_type: TxType;
   merchant: string;
   amount_expression?: string;
+  amount_mode?: AmountMode;
   amount: number;
+  net_amount?: number;
   tax_rate?: number;
   tax_amount?: number;
   category: string;
@@ -37,7 +41,9 @@ export type ReceiptOcrEncryptedPayload = {
     purchased_at: string;
     merchant_raw: string;
     amount_expression?: string;
+    amount_mode?: AmountMode;
     amount: number;
+    net_amount?: number;
     tax_rate?: number;
     tax_amount: number;
     category: string | null;
@@ -59,7 +65,9 @@ export type NormalizedEncryptedTx = {
   tx_type: TxType;
   merchant: string;
   amount_expression?: string;
+  amount_mode: AmountMode;
   amount: number;
+  net_amount?: number;
   tax_rate?: number;
   tax_amount?: number;
   category: string;
@@ -68,6 +76,20 @@ export type NormalizedEncryptedTx = {
   payment_method?: ManualNoReceiptKind;
   line_items: EncryptedLineItem[];
 };
+
+function inferredNetAmount(
+  amount: number,
+  netAmount: number | undefined,
+  taxAmount: number | undefined,
+): number | undefined {
+  if (typeof netAmount === "number" && Number.isFinite(netAmount)) {
+    return netAmount;
+  }
+  if (typeof taxAmount === "number" && Number.isFinite(taxAmount)) {
+    return amount - taxAmount;
+  }
+  return undefined;
+}
 
 export function normalizeEncryptedPayload(
   payload: EncryptedTxPayload,
@@ -84,7 +106,13 @@ export function normalizeEncryptedPayload(
       tx_type: "expense",
       merchant: payload.preview.merchant_raw || "(不明)",
       amount_expression: payload.preview.amount_expression,
+      amount_mode: payload.preview.amount_mode ?? "tax_included",
       amount: payload.preview.amount,
+      net_amount: inferredNetAmount(
+        payload.preview.amount,
+        payload.preview.net_amount,
+        payload.preview.tax_amount,
+      ),
       tax_rate: payload.preview.tax_rate,
       tax_amount: payload.preview.tax_amount,
       category: payload.preview.category || "未分類",
@@ -99,7 +127,13 @@ export function normalizeEncryptedPayload(
     tx_type: payload.tx_type,
     merchant: payload.merchant || "(手入力)",
     amount_expression: payload.amount_expression,
+    amount_mode: payload.amount_mode ?? "tax_included",
     amount: payload.amount,
+    net_amount: inferredNetAmount(
+      payload.amount,
+      payload.net_amount,
+      payload.tax_amount,
+    ),
     tax_rate: payload.tax_rate,
     tax_amount: payload.tax_amount,
     category: payload.category || "未分類",
