@@ -6,16 +6,41 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_LOG="/tmp/kakeibo-backend.log"
 FRONTEND_LOG="/tmp/kakeibo-frontend.log"
-LOCAL_URL="http://127.0.0.1:5173/"
+CERT_SERVER_LOG="/tmp/kakeibo-certificate-server.log"
 REQUESTED_LAN_IP="${KAKEIBO_LAN_IP:-192.168.3.5}"
+HTTPS_KEY="${KAKEIBO_HTTPS_KEY:-}"
+HTTPS_CERT="${KAKEIBO_HTTPS_CERT:-}"
+CERT_SERVER_ENABLED="${KAKEIBO_CERT_SERVER:-0}"
+CA_CERT_FILE="${KAKEIBO_CA_CERT_FILE:-}"
+CERT_PORT="${KAKEIBO_CERT_PORT:-5174}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
+CERT_SERVER_PID=""
+SCHEME="http"
+
+if [ -n "$HTTPS_KEY" ] || [ -n "$HTTPS_CERT" ]; then
+  if [ -z "$HTTPS_KEY" ] || [ -z "$HTTPS_CERT" ]; then
+    echo "KAKEIBO_HTTPS_KEY と KAKEIBO_HTTPS_CERT は両方指定してください。" >&2
+    exit 1
+  fi
+  if [ ! -r "$HTTPS_KEY" ] || [ ! -r "$HTTPS_CERT" ]; then
+    echo "HTTPS証明書または秘密鍵を読み込めません。" >&2
+    exit 1
+  fi
+  SCHEME="https"
+fi
+
+LOCAL_URL="${SCHEME}://127.0.0.1:5173/"
+LAN_URL="${SCHEME}://${REQUESTED_LAN_IP}:5173/"
 
 cleanup() {
   status=$?
   trap - EXIT INT TERM HUP
 
+  if [ -n "$CERT_SERVER_PID" ]; then
+    kill "$CERT_SERVER_PID" 2>/dev/null || true
+  fi
   if [ -n "$FRONTEND_PID" ]; then
     kill "$FRONTEND_PID" 2>/dev/null || true
   fi
@@ -23,6 +48,9 @@ cleanup() {
     kill "$BACKEND_PID" 2>/dev/null || true
   fi
 
+  if [ -n "$CERT_SERVER_PID" ]; then
+    wait "$CERT_SERVER_PID" 2>/dev/null || true
+  fi
   if [ -n "$FRONTEND_PID" ]; then
     wait "$FRONTEND_PID" 2>/dev/null || true
   fi
@@ -63,6 +91,14 @@ with socket.socket() as sock:
 PY
 }
 
+fetch_url() {
+  url="$1"
+  case "$url" in
+    https://*) curl -kfsS "$url" >/dev/null 2>&1 ;;
+    *) curl -fsS "$url" >/dev/null 2>&1 ;;
+  esac
+}
+
 wait_for_url() {
   label="$1"
   url="$2"
@@ -71,7 +107,7 @@ wait_for_url() {
   count=0
 
   while [ "$count" -lt 45 ]; do
-    if curl -fsS "$url" >/dev/null 2>&1; then
+    if fetch_url "$url"; then
       return 0
     fi
 
@@ -92,6 +128,11 @@ wait_for_url() {
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm が見つかりません。Node.js 22以降を用意してください。" >&2
+  exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl が見つかりません。" >&2
   exit 1
 fi
 
@@ -140,8 +181,24 @@ if port_in_use 5173; then
   exit 1
 fi
 
+if [ "$CERT_SERVER_ENABLED" = "1" ]; then
+  if [ "$SCHEME" != "https" ]; then
+    echo "証明書配布サーバーはHTTPS起動時だけ利用できます。" >&2
+    exit 1
+  fi
+  if [ ! -r "$CA_CERT_FILE" ]; then
+    echo "公開CA証明書を読み込めません: $CA_CERT_FILE" >&2
+    exit 1
+  fi
+  if port_in_use "$CERT_PORT"; then
+    echo "TCP ${CERT_PORT}番が既に使用中です。既存プロセスを停止してから再実行してください。" >&2
+    exit 1
+  fi
+fi
+
 : > "$BACKEND_LOG"
 : > "$FRONTEND_LOG"
+: > "$CERT_SERVER_LOG"
 
 echo "[start] Backend: 127.0.0.1:8000"
 (
@@ -158,9 +215,28 @@ wait_for_url \
   "$BACKEND_PID" \
   "$BACKEND_LOG"
 
-echo "[start] Frontend: 0.0.0.0:5173"
+if [ "$CERT_SERVER_ENABLED" = "1" ]; then
+  echo "[start] Certificate bootstrap: 0.0.0.0:${CERT_PORT}"
+  "$PYTHON" "$ROOT_DIR/scripts/cert_server.py" \
+    --cert "$CA_CERT_FILE" \
+    --app-url "$LAN_URL" \
+    --host 0.0.0.0 \
+    --port "$CERT_PORT" \
+    > "$CERT_SERVER_LOG" 2>&1 &
+  CERT_SERVER_PID=$!
+
+  wait_for_url \
+    "証明書配布サーバー" \
+    "http://127.0.0.1:${CERT_PORT}/health" \
+    "$CERT_SERVER_PID" \
+    "$CERT_SERVER_LOG"
+fi
+
+echo "[start] Frontend: ${SCHEME}://0.0.0.0:5173"
 (
   cd "$FRONTEND_DIR"
+  export KAKEIBO_HTTPS_KEY="$HTTPS_KEY"
+  export KAKEIBO_HTTPS_CERT="$HTTPS_CERT"
   exec "$FRONTEND_DIR/node_modules/.bin/vite" \
     --host 0.0.0.0 \
     --port 5173 \
@@ -170,7 +246,7 @@ FRONTEND_PID=$!
 
 wait_for_url \
   "フロントエンド" \
-  "http://127.0.0.1:5173/api/health" \
+  "${LOCAL_URL}api/health" \
   "$FRONTEND_PID" \
   "$FRONTEND_LOG"
 
@@ -183,7 +259,7 @@ cat <<EOF
 
 起動しました。
   このMac: $LOCAL_URL
-  指定LAN: http://${REQUESTED_LAN_IP}:5173/
+  スマホ  : $LAN_URL
 
 停止: このターミナルで Ctrl-C
 ログ:
@@ -191,10 +267,21 @@ cat <<EOF
   $FRONTEND_LOG
 EOF
 
+if [ "$CERT_SERVER_ENABLED" = "1" ]; then
+  cat <<EOF
+
+スマホの初回証明書設定:
+  http://${REQUESTED_LAN_IP}:${CERT_PORT}/
+証明書配布ログ:
+  $CERT_SERVER_LOG
+EOF
+fi
+
 if [ -n "$LAN_IPS" ]; then
+  echo
   echo "検出したLAN URL:"
   printf '%s\n' "$LAN_IPS" | while IFS= read -r ip; do
-    [ -n "$ip" ] && echo "  http://${ip}:5173/"
+    [ -n "$ip" ] && echo "  ${SCHEME}://${ip}:5173/"
   done
 fi
 
@@ -209,10 +296,16 @@ if [ "${KAKEIBO_NO_OPEN:-0}" != "1" ] && command -v open >/dev/null 2>&1; then
 fi
 
 while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do
+  if [ -n "$CERT_SERVER_PID" ] && ! kill -0 "$CERT_SERVER_PID" 2>/dev/null; then
+    break
+  fi
   sleep 2
 done
 
-echo "バックエンドまたはフロントエンドが終了しました。" >&2
+echo "バックエンド、フロントエンド、または証明書配布サーバーが終了しました。" >&2
 tail -n 40 "$BACKEND_LOG" >&2 || true
 tail -n 40 "$FRONTEND_LOG" >&2 || true
+if [ -n "$CERT_SERVER_PID" ]; then
+  tail -n 40 "$CERT_SERVER_LOG" >&2 || true
+fi
 exit 1

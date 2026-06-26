@@ -48,8 +48,10 @@ jobs:
       - name: Validate local script syntax
         run: |
           bash -n scripts/start.sh
+          bash -n scripts/start_mobile.sh
+          bash -n scripts/setup_mobile_https.sh
           bash -n scripts/data_manager.sh
-          python -m py_compile scripts/data_manager.py
+          python -m py_compile scripts/data_manager.py scripts/cert_server.py
       - name: Install core backend dependencies
         run: python -m pip install --disable-pip-version-check -r backend/requirements-core.txt
       - name: Run core backend tests
