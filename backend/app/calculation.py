@@ -1,12 +1,15 @@
-"""Safe arithmetic for user-entered tax-inclusive amounts."""
+"""Safe arithmetic and deterministic tax breakdowns for user-entered amounts."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, ROUND_HALF_UP, localcontext
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
+from typing import Literal
 import unicodedata
 
 MAX_EXPRESSION_LENGTH = 200
 MAX_NESTING_DEPTH = 20
+
+AmountMode = Literal["tax_included", "tax_excluded"]
 
 
 class PriceExpressionError(ValueError):
@@ -15,15 +18,25 @@ class PriceExpressionError(ValueError):
 
 @dataclass(frozen=True)
 class AmountCalculation:
+    # Final amount paid, always tax-inclusive.
     amount: int
+    # Amount before tax.
+    net_amount: int
     tax_rate: int
     tax_amount: int
+    # Rounded result of the expression before interpreting the tax mode.
+    input_amount: int
+    amount_mode: AmountMode
 
 
 def normalize_price_expression(expression: str) -> str:
     """Normalize full-width input and reject everything outside the grammar."""
     normalized = unicodedata.normalize("NFKC", expression)
-    normalized = normalized.replace("×", "*").replace("÷", "/")
+    normalized = (
+        normalized.replace("×", "*")
+        .replace("÷", "/")
+        .replace("−", "-")
+    )
     normalized = "".join(normalized.split())
 
     if not normalized:
@@ -151,6 +164,7 @@ def evaluate_price_expression(expression: str) -> Decimal:
 
 
 def round_yen(value: Decimal) -> int:
+    """Round to the nearest yen using half-up for intuitive display."""
     return int(value.to_integral_value(rounding=ROUND_HALF_UP))
 
 
@@ -161,19 +175,47 @@ def calc_tax_amount(amount_incl_tax: int, tax_rate: int) -> int:
     with localcontext() as context:
         context.prec = MAX_EXPRESSION_LENGTH * 2
         tax = Decimal(amount_incl_tax) * tax_rate / Decimal(100 + tax_rate)
-        return int(tax.to_integral_value(rounding=ROUND_HALF_EVEN))
+        return round_yen(tax)
 
 
-def calculate_amount(expression: str, tax_rate: int) -> AmountCalculation:
+def calc_tax_from_exclusive(net_amount: int, tax_rate: int) -> int:
+    """Return tax to add to an integer tax-exclusive amount."""
+    if net_amount <= 0 or tax_rate <= 0:
+        return 0
+    with localcontext() as context:
+        context.prec = MAX_EXPRESSION_LENGTH * 2
+        tax = Decimal(net_amount) * tax_rate / Decimal(100)
+        return round_yen(tax)
+
+
+def calculate_amount(
+    expression: str,
+    tax_rate: int,
+    amount_mode: AmountMode = "tax_included",
+) -> AmountCalculation:
     if not 0 <= tax_rate <= 100:
         raise PriceExpressionError("税率は0〜100の整数で入力してください")
+    if amount_mode not in {"tax_included", "tax_excluded"}:
+        raise PriceExpressionError("税込入力または税抜入力を選択してください")
 
-    amount = round_yen(evaluate_price_expression(expression))
-    if amount <= 0:
+    input_amount = round_yen(evaluate_price_expression(expression))
+    if input_amount <= 0:
         raise PriceExpressionError("計算結果は1円以上にしてください")
+
+    if amount_mode == "tax_excluded":
+        net_amount = input_amount
+        tax_amount = calc_tax_from_exclusive(net_amount, tax_rate)
+        amount = net_amount + tax_amount
+    else:
+        amount = input_amount
+        tax_amount = calc_tax_amount(amount, tax_rate)
+        net_amount = amount - tax_amount
 
     return AmountCalculation(
         amount=amount,
+        net_amount=net_amount,
         tax_rate=tax_rate,
-        tax_amount=calc_tax_amount(amount, tax_rate),
+        tax_amount=tax_amount,
+        input_amount=input_amount,
+        amount_mode=amount_mode,
     )
