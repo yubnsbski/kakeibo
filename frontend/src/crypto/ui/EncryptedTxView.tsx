@@ -18,6 +18,11 @@ import {
   normalizeCategory,
 } from "../categories";
 import {
+  assertLineItemTotal,
+  buildManualLineItems,
+  type LineItemDraft,
+} from "../lineItems";
+import {
   normalizeEncryptedPayload,
   type EncryptedLineItem,
   type EncryptedTxPayload,
@@ -27,6 +32,10 @@ import {
   type TxType,
 } from "../txPayload";
 import { DataIntegrityCheck } from "./DataIntegrityCheck";
+import {
+  DraftLineItemsEditor,
+  StoredLineItemsEditor,
+} from "./LineItemsEditor";
 
 type DecryptedRow = {
   id: number;
@@ -112,20 +121,25 @@ function normalizedLineItems(
   calculation: AmountCalculationResponse,
 ): EncryptedLineItem[] {
   const category = normalizeCategory(edit.category);
-  const items = edit.line_items.map((item) => {
-    const itemAmount = Number(item.amount);
+  const items = edit.line_items.map((item, index) => {
+    const amount = Number(item.amount);
+    if (!Number.isFinite(amount) || !Number.isInteger(amount)) {
+      throw new Error(`明細${index + 1}の金額は整数で入力してください`);
+    }
+
     return {
       ...item,
-      name: item.name || edit.merchant || "明細",
-      amount:
-        Number.isFinite(itemAmount) && itemAmount >= 0 ? Math.round(itemAmount) : 0,
+      name: item.name.trim() || edit.merchant.trim() || `明細${index + 1}`,
+      amount,
       category: normalizeCategory(item.category || category),
     };
   });
 
-  // 通常の手入力は単一明細なので、式の計算結果と明細額を同期する。
-  if (edit.payload.source === "manual" && items.length === 1) {
-    items[0] = { ...items[0], amount: calculation.amount };
+  if (edit.payload.source === "manual") {
+    if (items.length === 1) {
+      items[0] = { ...items[0], amount: calculation.amount };
+    }
+    assertLineItemTotal(items, calculation.amount);
   }
 
   return items;
@@ -192,6 +206,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
   const [memo, setMemo] = useState("");
   const [paymentMethod, setPaymentMethod] =
     useState<ManualNoReceiptKind>("cash");
+  const [manualLineItems, setManualLineItems] = useState<LineItemDraft[]>([]);
 
   const [rows, setRows] = useState<DecryptedRow[]>([]);
   const [editing, setEditing] = useState<EditingState | null>(null);
@@ -221,11 +236,11 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
             payload,
             normalized: normalizeEncryptedPayload(payload),
           };
-        } catch (e) {
+        } catch (error) {
           return {
             id: row.id,
             raw: row,
-            error: e instanceof Error ? e.message : String(e),
+            error: error instanceof Error ? error.message : String(error),
           };
         }
       }),
@@ -239,6 +254,9 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
     setTxType(nextType);
     setCategory(nextCategory);
     setTaxRate(String(defaultTaxRate(nextType, nextCategory)));
+    setManualLineItems((items) =>
+      items.map((item) => ({ ...item, category: nextCategory })),
+    );
   }
 
   function changeCategory(nextCategory: string) {
@@ -253,6 +271,12 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
     try {
       const calculation = await calculateExpression(amountExpression, taxRate);
       const normalizedCategory = normalizeCategory(category);
+      const lineItems = buildManualLineItems(manualLineItems, {
+        totalAmount: calculation.amount,
+        fallbackName: merchant || paymentMethodLabel(paymentMethod) || "手入力",
+        fallbackCategory: normalizedCategory,
+        memo,
+      });
 
       const payload: ManualEncryptedPayload = {
         source: "manual",
@@ -267,14 +291,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
         category: normalizedCategory,
         memo,
         payment_method: paymentMethod,
-        line_items: [
-          {
-            name: merchant || paymentMethodLabel(paymentMethod) || "手入力",
-            amount: calculation.amount,
-            category: normalizedCategory,
-            memo,
-          },
-        ],
+        line_items: lineItems,
       };
 
       const encryptedRecord = await encryptJson(requireKey(), payload);
@@ -282,12 +299,14 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
 
       setMerchant("");
       setMemo("");
+      setManualLineItems([]);
       await loadRows();
       setMessage(
-        `手入力取引を暗号化保存しました（${yen(calculation.amount)}・税額${yen(calculation.tax_amount)}）`,
+        `手入力取引を暗号化保存しました（${yen(calculation.amount)}・` +
+          `明細${lineItems.length}件・税額${yen(calculation.tax_amount)}）`,
       );
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
@@ -334,6 +353,10 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
       tx_type: nextType,
       category: nextCategory,
       tax_rate: String(defaultTaxRate(nextType, nextCategory)),
+      line_items: editing.line_items.map((item) => ({
+        ...item,
+        category: nextCategory,
+      })),
     });
   }
 
@@ -362,13 +385,15 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
 
       await updateEncryptedTx(editing.id, JSON.stringify(encryptedRecord), 1);
 
+      const itemCount = normalizeEncryptedPayload(updatedPayload).line_items.length;
       setEditing(null);
       await loadRows();
       setMessage(
-        `更新しました（${yen(calculation.amount)}・税額${yen(calculation.tax_amount)}）`,
+        `更新しました（${yen(calculation.amount)}・明細${itemCount}件・` +
+          `税額${yen(calculation.tax_amount)}）`,
       );
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
@@ -383,16 +408,16 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
       await deleteEncryptedTx(id);
       await loadRows();
       setMessage("削除しました");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
   }
 
   useEffect(() => {
-    void loadRows().catch((e) => {
-      setMessage(e instanceof Error ? e.message : String(e));
+    void loadRows().catch((error) => {
+      setMessage(error instanceof Error ? error.message : String(error));
     });
   }, [refreshKey]);
 
@@ -405,7 +430,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
         金額計算時にバックエンドへ送るのは値段式と税率だけです。
       </p>
 
-      <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
+      <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
         <h3>レシートなし手入力</h3>
 
         <label>
@@ -413,7 +438,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(event) => setDate(event.target.value)}
           />
         </label>
 
@@ -421,7 +446,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           種別
           <select
             value={txType}
-            onChange={(e) => changeTxType(e.target.value as TxType)}
+            onChange={(event) => changeTxType(event.target.value as TxType)}
           >
             <option value="expense">支出</option>
             <option value="income">収入</option>
@@ -432,8 +457,8 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           種類
           <select
             value={paymentMethod}
-            onChange={(e) =>
-              setPaymentMethod(e.target.value as ManualNoReceiptKind)
+            onChange={(event) =>
+              setPaymentMethod(event.target.value as ManualNoReceiptKind)
             }
           >
             <option value="cash">現金</option>
@@ -443,12 +468,18 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
 
         <label>
           店舗・相手先
-          <input value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+          <input
+            value={merchant}
+            onChange={(event) => setMerchant(event.target.value)}
+          />
         </label>
 
         <label>
           カテゴリ
-          <select value={category} onChange={(e) => changeCategory(e.target.value)}>
+          <select
+            value={category}
+            onChange={(event) => changeCategory(event.target.value)}
+          >
             {categoryOptionsWithCurrent(txType, category).map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -462,7 +493,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           <input
             value={amountExpression}
             placeholder="例: (1200 + 300) / 2"
-            onChange={(e) => setAmountExpression(e.target.value)}
+            onChange={(event) => setAmountExpression(event.target.value)}
           />
         </label>
 
@@ -474,13 +505,21 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
             max="100"
             step="1"
             value={taxRate}
-            onChange={(e) => setTaxRate(e.target.value)}
+            onChange={(event) => setTaxRate(event.target.value)}
           />
         </label>
 
+        <DraftLineItemsEditor
+          items={manualLineItems}
+          txType={txType}
+          defaultCategory={category}
+          disabled={saving}
+          onChange={setManualLineItems}
+        />
+
         <label>
           メモ
-          <input value={memo} onChange={(e) => setMemo(e.target.value)} />
+          <input value={memo} onChange={(event) => setMemo(event.target.value)} />
         </label>
 
         <button onClick={() => void handleCreateManual()} disabled={saving}>
@@ -489,8 +528,8 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
 
         <button
           onClick={() =>
-            void loadRows().catch((e) =>
-              setMessage(e instanceof Error ? e.message : String(e)),
+            void loadRows().catch((error) =>
+              setMessage(error instanceof Error ? error.message : String(error)),
             )
           }
           disabled={saving}
@@ -505,14 +544,14 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
         <div style={{ border: "1px solid #aaa", padding: 12, marginTop: 16 }}>
           <h3>編集</h3>
 
-          <div style={{ display: "grid", gap: 8, maxWidth: 620 }}>
+          <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
             <label>
               日付
               <input
                 type="date"
                 value={editing.date}
-                onChange={(e) =>
-                  setEditing({ ...editing, date: e.target.value })
+                onChange={(event) =>
+                  setEditing({ ...editing, date: event.target.value })
                 }
               />
             </label>
@@ -522,8 +561,8 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               <select
                 value={editing.tx_type}
                 disabled={editing.payload.source === "receipt_ocr"}
-                onChange={(e) =>
-                  changeEditingTxType(e.target.value as TxType)
+                onChange={(event) =>
+                  changeEditingTxType(event.target.value as TxType)
                 }
               >
                 <option value="expense">支出</option>
@@ -539,10 +578,10 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                 種類
                 <select
                   value={editing.payment_method}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setEditing({
                       ...editing,
-                      payment_method: e.target.value as ManualNoReceiptKind,
+                      payment_method: event.target.value as ManualNoReceiptKind,
                     })
                   }
                 >
@@ -556,8 +595,8 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               店舗・相手先
               <input
                 value={editing.merchant}
-                onChange={(e) =>
-                  setEditing({ ...editing, merchant: e.target.value })
+                onChange={(event) =>
+                  setEditing({ ...editing, merchant: event.target.value })
                 }
               />
             </label>
@@ -566,7 +605,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               カテゴリ
               <select
                 value={editing.category}
-                onChange={(e) => changeEditingCategory(e.target.value)}
+                onChange={(event) => changeEditingCategory(event.target.value)}
               >
                 {categoryOptionsWithCurrent(
                   editing.tx_type,
@@ -583,10 +622,10 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               値段（税込・四則演算と括弧が使用可能）
               <input
                 value={editing.amount_expression}
-                onChange={(e) =>
+                onChange={(event) =>
                   setEditing({
                     ...editing,
-                    amount_expression: e.target.value,
+                    amount_expression: event.target.value,
                   })
                 }
               />
@@ -600,92 +639,31 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                 max="100"
                 step="1"
                 value={editing.tax_rate}
-                onChange={(e) =>
-                  setEditing({ ...editing, tax_rate: e.target.value })
+                onChange={(event) =>
+                  setEditing({ ...editing, tax_rate: event.target.value })
                 }
               />
             </label>
+
+            <StoredLineItemsEditor
+              items={editing.line_items}
+              txType={editing.tx_type}
+              defaultCategory={editing.category}
+              disabled={saving}
+              onChange={(lineItems) =>
+                setEditing({ ...editing, line_items: lineItems })
+              }
+            />
 
             <label>
               メモ
               <input
                 value={editing.memo}
-                onChange={(e) =>
-                  setEditing({ ...editing, memo: e.target.value })
+                onChange={(event) =>
+                  setEditing({ ...editing, memo: event.target.value })
                 }
               />
             </label>
-
-            <h4>明細</h4>
-            {editing.line_items.map((item, index) => (
-              <div
-                key={index}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr auto",
-                  gap: 8,
-                }}
-              >
-                <input
-                  value={item.name}
-                  placeholder="品目"
-                  onChange={(e) => {
-                    const next = [...editing.line_items];
-                    next[index] = { ...item, name: e.target.value };
-                    setEditing({ ...editing, line_items: next });
-                  }}
-                />
-                <select
-                  value={normalizeCategory(item.category)}
-                  onChange={(e) => {
-                    const next = [...editing.line_items];
-                    next[index] = { ...item, category: e.target.value };
-                    setEditing({ ...editing, line_items: next });
-                  }}
-                >
-                  {categoryOptionsWithCurrent(
-                    editing.tx_type,
-                    item.category,
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={item.amount}
-                  placeholder="値段"
-                  onChange={(e) => {
-                    const next = [...editing.line_items];
-                    next[index] = {
-                      ...item,
-                      amount: Number(e.target.value) || 0,
-                    };
-                    setEditing({ ...editing, line_items: next });
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    const next = editing.line_items.filter(
-                      (_lineItem, itemIndex) => itemIndex !== index,
-                    );
-                    setEditing({
-                      ...editing,
-                      line_items:
-                        next.length > 0
-                          ? next
-                          : [defaultLineItem(editing.category)],
-                    });
-                  }}
-                  disabled={saving}
-                >
-                  削除
-                </button>
-              </div>
-            ))}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => void handleUpdate()} disabled={saving}>
@@ -714,6 +692,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                 <th>店舗・相手先</th>
                 <th>カテゴリ</th>
                 <th>値段</th>
+                <th>明細</th>
                 <th>税率</th>
                 <th>税額</th>
                 <th>メモ</th>
@@ -725,12 +704,16 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                 if (!row.normalized) {
                   return (
                     <tr key={row.id}>
-                      <td colSpan={10} className="err">
+                      <td colSpan={11} className="err">
                         ID {row.id}: 復号失敗 {row.error || "不明なエラー"}
                       </td>
                     </tr>
                   );
                 }
+
+                const expression = row.normalized.amount_expression?.trim();
+                const showExpression =
+                  expression && expression !== String(row.normalized.amount);
 
                 return (
                   <tr key={row.id}>
@@ -741,9 +724,15 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
                     <td>{paymentMethodLabel(row.normalized.payment_method)}</td>
                     <td>{row.normalized.merchant}</td>
                     <td>{row.normalized.category}</td>
-                    <td title={row.normalized.amount_expression || undefined}>
-                      {yen(row.normalized.amount)}
+                    <td>
+                      <div>{yen(row.normalized.amount)}</div>
+                      {showExpression && (
+                        <div className="hint" style={{ whiteSpace: "nowrap" }}>
+                          式: {expression}
+                        </div>
+                      )}
                     </td>
+                    <td>{row.normalized.line_items.length}件</td>
                     <td>{taxRateLabel(row.normalized.tax_rate)}</td>
                     <td>{yen(row.normalized.tax_amount)}</td>
                     <td>{row.normalized.memo}</td>

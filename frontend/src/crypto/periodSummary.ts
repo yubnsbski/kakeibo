@@ -46,8 +46,13 @@ function normalizeCategoryLabel(value: string | null | undefined): string {
   return value?.trim() || "未分類";
 }
 
-function isUsableAmount(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
+function isUsableTransactionAmount(value: number): boolean {
+  return Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+function isUsableLineItemAmount(value: number): boolean {
+  // 割引・調整は負数で保持するため、明細は符号付き整数を許可する。
+  return Number.isFinite(value) && Number.isInteger(value);
 }
 
 function matchesPeriod(
@@ -67,7 +72,7 @@ function allocationsForRow(row: NormalizedEncryptedTx): {
 } {
   const validLineItems =
     row.line_items.length > 0 &&
-    row.line_items.every((item) => isUsableAmount(item.amount));
+    row.line_items.every((item) => isUsableLineItemAmount(item.amount));
   const lineItemTotal = validLineItems
     ? row.line_items.reduce((sum, item) => sum + item.amount, 0)
     : Number.NaN;
@@ -86,7 +91,7 @@ function allocationsForRow(row: NormalizedEncryptedTx): {
     allocations: [
       {
         category: normalizeCategoryLabel(row.category),
-        amount: isUsableAmount(row.amount) ? row.amount : 0,
+        amount: isUsableTransactionAmount(row.amount) ? row.amount : 0,
       },
     ],
     usedFallback: true,
@@ -157,9 +162,9 @@ export function summarizeByCategory(
 
     addAllocations(categoryMaps[row.tx_type], allocations);
     if (row.tx_type === "expense") {
-      expenseTotal += isUsableAmount(row.amount) ? row.amount : 0;
+      expenseTotal += isUsableTransactionAmount(row.amount) ? row.amount : 0;
     } else {
-      incomeTotal += isUsableAmount(row.amount) ? row.amount : 0;
+      incomeTotal += isUsableTransactionAmount(row.amount) ? row.amount : 0;
     }
   }
 
