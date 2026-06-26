@@ -9,6 +9,10 @@ import {
   applyCalculatorCommand,
   type CalculatorCommand,
 } from "../calculatorInput";
+import {
+  isZeroAmountPreview,
+  optimisticAmountPreview,
+} from "../calculatorPreview";
 
 type PreviewStatus =
   | { kind: "idle" }
@@ -177,6 +181,14 @@ function modeLabel(mode: AmountMode): string {
   return mode === "tax_excluded" ? "税抜で入力" : "税込で入力";
 }
 
+function calculationSignature(
+  expression: string,
+  taxRate: string,
+  amountMode: AmountMode,
+): string {
+  return `${amountMode}\u0000${taxRate}\u0000${expression}`;
+}
+
 function SummaryCell({
   label,
   value,
@@ -225,68 +237,132 @@ export function AmountCalculator({
 }: AmountCalculatorProps) {
   const [status, setStatus] = useState<PreviewStatus>({ kind: "idle" });
   const requestSequence = useRef(0);
+  const immediateSignature = useRef<string | null>(null);
 
-  const runCalculation = useCallback(async () => {
-    const trimmedExpression = expression.trim();
-    const parsedTaxRate = parseTaxRate(taxRate);
-    const requestId = ++requestSequence.current;
+  const runCalculation = useCallback(
+    async (
+      targetExpression = expression,
+      targetTaxRate = taxRate,
+      targetAmountMode = amountMode,
+    ) => {
+      const trimmedExpression = targetExpression.trim();
+      const parsedTaxRate = parseTaxRate(targetTaxRate);
+      const requestId = ++requestSequence.current;
 
-    if (!trimmedExpression) {
-      setStatus({ kind: "error", message: "値段式を入力してください" });
-      onResultChange?.(null);
-      return;
-    }
+      if (!trimmedExpression) {
+        setStatus({ kind: "error", message: "値段式を入力してください" });
+        onResultChange?.(null);
+        return;
+      }
 
-    if (parsedTaxRate === null) {
-      setStatus({ kind: "error", message: "税率は0〜100の整数で入力してください" });
-      onResultChange?.(null);
-      return;
-    }
+      if (parsedTaxRate === null) {
+        setStatus({ kind: "error", message: "税率は0〜100の整数で入力してください" });
+        onResultChange?.(null);
+        return;
+      }
 
-    setStatus({ kind: "loading" });
-    onResultChange?.(null);
-
-    try {
-      const result = await calculateAmount(
+      const optimistic = optimisticAmountPreview(
         trimmedExpression,
         parsedTaxRate,
-        amountMode,
+        targetAmountMode,
       );
-      if (requestId !== requestSequence.current) return;
-      setStatus({ kind: "success", result });
-      onResultChange?.(result);
-    } catch (error) {
-      if (requestId !== requestSequence.current) return;
-      setStatus({ kind: "error", message: cleanErrorMessage(error) });
+      if (isZeroAmountPreview(optimistic)) {
+        setStatus({ kind: "idle" });
+        onResultChange?.(null);
+        return;
+      }
+
+      setStatus({ kind: "loading" });
       onResultChange?.(null);
-    }
-  }, [amountMode, expression, onResultChange, taxRate]);
+
+      try {
+        const result = await calculateAmount(
+          trimmedExpression,
+          parsedTaxRate,
+          targetAmountMode,
+        );
+        if (requestId !== requestSequence.current) return;
+        setStatus({ kind: "success", result });
+        onResultChange?.(result);
+      } catch (error) {
+        if (requestId !== requestSequence.current) return;
+        setStatus({ kind: "error", message: cleanErrorMessage(error) });
+        onResultChange?.(null);
+      }
+    },
+    [amountMode, expression, onResultChange, taxRate],
+  );
 
   useEffect(() => {
+    const signature = calculationSignature(expression, taxRate, amountMode);
+    if (immediateSignature.current === signature) {
+      immediateSignature.current = null;
+      return;
+    }
+
     requestSequence.current += 1;
     setStatus({ kind: "idle" });
     onResultChange?.(null);
 
+    const optimistic = optimisticAmountPreview(
+      expression,
+      parseTaxRate(taxRate),
+      amountMode,
+    );
+    if (isZeroAmountPreview(optimistic)) return;
+
     const timer = window.setTimeout(() => {
-      void runCalculation();
-    }, 300);
+      void runCalculation(expression, taxRate, amountMode);
+    }, 250);
 
     return () => window.clearTimeout(timer);
   }, [amountMode, expression, onResultChange, runCalculation, taxRate]);
 
-  function handleKey(command: CalculatorCommand) {
-    onExpressionChange(applyCalculatorCommand(expression, command));
+  function calculateImmediately(
+    nextExpression: string,
+    nextTaxRate: string,
+    nextAmountMode: AmountMode,
+  ) {
+    immediateSignature.current = calculationSignature(
+      nextExpression,
+      nextTaxRate,
+      nextAmountMode,
+    );
+    void runCalculation(nextExpression, nextTaxRate, nextAmountMode);
   }
 
-  const result = status.kind === "success" ? status.result : null;
+  function handleKey(command: CalculatorCommand) {
+    const nextExpression = applyCalculatorCommand(expression, command);
+    onExpressionChange(nextExpression);
+    calculateImmediately(nextExpression, taxRate, amountMode);
+  }
+
+  function handleAmountModeChange(nextAmountMode: AmountMode) {
+    onAmountModeChange(nextAmountMode);
+    calculateImmediately(expression, taxRate, nextAmountMode);
+  }
+
+  function handleTaxRateChange(nextTaxRate: string) {
+    onTaxRateChange(nextTaxRate);
+    calculateImmediately(expression, nextTaxRate, amountMode);
+  }
+
   const selectedTaxRate = parseTaxRate(taxRate);
+  const optimisticResult = optimisticAmountPreview(
+    expression,
+    selectedTaxRate,
+    amountMode,
+  );
+  const verifiedResult = status.kind === "success" ? status.result : null;
+  const displayedResult = verifiedResult ?? optimisticResult;
+  const zeroState = isZeroAmountPreview(optimisticResult);
 
   return (
     <div style={panelStyle}>
       <div>
         <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>金額を計算</div>
         <div className="hint" style={{ marginTop: 3 }}>
-          入力する金額が税込か税抜かを先に選びます。
+          0円から開始します。数字キーを押すとその場で金額へ反映されます。
         </div>
       </div>
 
@@ -300,7 +376,7 @@ export function AmountCalculator({
           aria-pressed={amountMode === "tax_included"}
           disabled={disabled}
           style={modeButtonStyle(amountMode === "tax_included")}
-          onClick={() => onAmountModeChange("tax_included")}
+          onClick={() => handleAmountModeChange("tax_included")}
         >
           税込で入力
         </button>
@@ -309,7 +385,7 @@ export function AmountCalculator({
           aria-pressed={amountMode === "tax_excluded"}
           disabled={disabled}
           style={modeButtonStyle(amountMode === "tax_excluded")}
-          onClick={() => onAmountModeChange("tax_excluded")}
+          onClick={() => handleAmountModeChange("tax_excluded")}
         >
           税抜で入力
         </button>
@@ -318,7 +394,7 @@ export function AmountCalculator({
       <div style={displayStyle} aria-live="polite">
         <div style={{ color: "#57606a", fontSize: "0.8rem" }}>
           {modeLabel(amountMode)}
-          {expression.trim() ? `：${expression}` : "：式を入力してください"}
+          {expression.trim() ? `：${expression}` : "：0"}
         </div>
 
         <div style={{ display: "grid", justifyItems: "end", gap: 2 }}>
@@ -333,8 +409,8 @@ export function AmountCalculator({
               lineHeight: 1.1,
             }}
           >
-            {result
-              ? `¥${result.amount.toLocaleString()}`
+            {displayedResult
+              ? `¥${displayedResult.amount.toLocaleString()}`
               : status.kind === "loading"
                 ? "計算中…"
                 : "—"}
@@ -342,12 +418,12 @@ export function AmountCalculator({
         </div>
 
         <div style={taxSummaryStyle}>
-          <SummaryCell label="税抜" value={result?.net_amount ?? null} />
-          <SummaryCell label="消費税" value={result?.tax_amount ?? null} />
-          <SummaryCell label="税込" value={result?.amount ?? null} emphasis />
+          <SummaryCell label="税抜" value={displayedResult?.net_amount ?? null} />
+          <SummaryCell label="消費税" value={displayedResult?.tax_amount ?? null} />
+          <SummaryCell label="税込" value={displayedResult?.amount ?? null} emphasis />
         </div>
 
-        {status.kind === "error" && (
+        {status.kind === "error" && !zeroState && (
           <div className="err" style={{ fontSize: "0.86rem", fontWeight: 650 }}>
             {status.message}
           </div>
@@ -388,7 +464,7 @@ export function AmountCalculator({
               aria-pressed={selectedTaxRate === rate}
               disabled={disabled}
               style={taxRateButtonStyle(selectedTaxRate === rate)}
-              onClick={() => onTaxRateChange(String(rate))}
+              onClick={() => handleTaxRateChange(String(rate))}
             >
               {rate}%
             </button>
@@ -404,7 +480,7 @@ export function AmountCalculator({
               disabled={disabled}
               aria-label="税率"
               style={{ width: 76, minHeight: 40 }}
-              onChange={(event) => onTaxRateChange(event.target.value)}
+              onChange={(event) => handleTaxRateChange(event.target.value)}
             />
             <span>%</span>
           </label>
@@ -434,25 +510,25 @@ export function AmountCalculator({
 
       <button
         type="button"
-        disabled={disabled || status.kind === "loading"}
+        disabled={disabled || status.kind === "loading" || zeroState}
         style={{
           minHeight: 50,
           borderRadius: 999,
           border: "none",
-          background: "#2da44e",
+          background: zeroState ? "#8c959f" : "#2da44e",
           color: "#ffffff",
           WebkitTextFillColor: "#ffffff",
           fontWeight: 800,
           fontSize: "1rem",
-          cursor: "pointer",
+          cursor: zeroState ? "not-allowed" : "pointer",
         }}
-        onClick={() => void runCalculation()}
+        onClick={() => void runCalculation(expression, taxRate, amountMode)}
       >
-        ＝ 計算する
+        {zeroState ? "数字を入力してください" : "＝ 計算する"}
       </button>
 
       <p className="hint" style={{ margin: 0 }}>
-        入力後約0.3秒で自動計算します。1円未満は四捨五入し、保存時にも再計算します。
+        数字キーは即時反映します。手入力した式は約0.25秒後に検証し、保存時にも再計算します。
       </p>
     </div>
   );
