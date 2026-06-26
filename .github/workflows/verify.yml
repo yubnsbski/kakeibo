@@ -45,13 +45,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Validate local launcher syntax
-        run: bash -n scripts/start.sh
+      - name: Validate local script syntax
+        run: |
+          bash -n scripts/start.sh
+          bash -n scripts/data_manager.sh
+          python -m py_compile scripts/data_manager.py
       - name: Install core backend dependencies
         run: python -m pip install --disable-pip-version-check -r backend/requirements-core.txt
-      - name: Run amount calculation tests
+      - name: Run core backend tests
         working-directory: backend
-        run: python -m unittest tests.test_calculation
+        run: python -m unittest tests.test_calculation tests.test_data_paths
       - name: Import application without optional OCR packages
         working-directory: backend
         run: python -c 'from app.main import app; assert app.title == "kakeibo API"'
