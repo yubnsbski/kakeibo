@@ -94,11 +94,23 @@ describe("manual line item helpers", () => {
     ).toThrow("整数");
   });
 
-  test("新規明細は指定カテゴリで初期化する", () => {
+  test("新規明細は指定カテゴリと既定0円で初期化する", () => {
     expect(emptyLineItemDraft("食費")).toEqual({
       name: "",
       amount: "0",
       category: "食費",
     });
+  });
+
+  test("最初の明細へ計算結果を初期値として渡せる", () => {
+    expect(emptyLineItemDraft("食費", 1100)).toEqual({
+      name: "",
+      amount: "1100",
+      category: "食費",
+    });
+  });
+
+  test("明細の初期金額は整数だけを許可する", () => {
+    expect(() => emptyLineItemDraft("食費", 10.5)).toThrow("整数");
   });
 });
