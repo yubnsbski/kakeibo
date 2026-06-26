@@ -31,6 +31,7 @@ import {
   type NormalizedEncryptedTx,
   type TxType,
 } from "../txPayload";
+import { AmountCalculator } from "./AmountCalculator";
 import { DataIntegrityCheck } from "./DataIntegrityCheck";
 import {
   DraftLineItemsEditor,
@@ -207,9 +208,13 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
   const [paymentMethod, setPaymentMethod] =
     useState<ManualNoReceiptKind>("cash");
   const [manualLineItems, setManualLineItems] = useState<LineItemDraft[]>([]);
+  const [manualCalculation, setManualCalculation] =
+    useState<AmountCalculationResponse | null>(null);
 
   const [rows, setRows] = useState<DecryptedRow[]>([]);
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const [editingCalculation, setEditingCalculation] =
+    useState<AmountCalculationResponse | null>(null);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -323,6 +328,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
       row.normalized.category,
     );
 
+    setEditingCalculation(null);
     setEditing({
       id: row.id,
       payload: row.payload,
@@ -343,6 +349,11 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
             }))
           : [defaultLineItem(row.normalized.category)],
     });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setEditingCalculation(null);
   }
 
   function changeEditingTxType(nextType: TxType) {
@@ -387,6 +398,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
 
       const itemCount = normalizeEncryptedPayload(updatedPayload).line_items.length;
       setEditing(null);
+      setEditingCalculation(null);
       await loadRows();
       setMessage(
         `更新しました（${yen(calculation.amount)}・明細${itemCount}件・` +
@@ -430,7 +442,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
         金額計算時にバックエンドへ送るのは値段式と税率だけです。
       </p>
 
-      <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
+      <div style={{ display: "grid", gap: 10, maxWidth: 760 }}>
         <h3>レシートなし手入力</h3>
 
         <label>
@@ -488,14 +500,14 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           </select>
         </label>
 
-        <label>
-          値段（税込・四則演算と括弧が使用可能）
-          <input
-            value={amountExpression}
-            placeholder="例: (1200 + 300) / 2"
-            onChange={(event) => setAmountExpression(event.target.value)}
-          />
-        </label>
+        <AmountCalculator
+          id="manual-amount-expression"
+          expression={amountExpression}
+          taxRate={taxRate}
+          disabled={saving}
+          onExpressionChange={setAmountExpression}
+          onResultChange={setManualCalculation}
+        />
 
         <label>
           税率（%）
@@ -513,6 +525,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           items={manualLineItems}
           txType={txType}
           defaultCategory={category}
+          expectedAmount={manualCalculation?.amount}
           disabled={saving}
           onChange={setManualLineItems}
         />
@@ -522,8 +535,15 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
           <input value={memo} onChange={(event) => setMemo(event.target.value)} />
         </label>
 
-        <button onClick={() => void handleCreateManual()} disabled={saving}>
-          {saving ? "処理中..." : "手入力を暗号化保存"}
+        <button
+          onClick={() => void handleCreateManual()}
+          disabled={saving || manualCalculation === null}
+        >
+          {saving
+            ? "処理中..."
+            : manualCalculation
+              ? `${manualCalculation.amount.toLocaleString()}円を暗号化保存`
+              : "計算結果を確認してください"}
         </button>
 
         <button
@@ -544,7 +564,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
         <div style={{ border: "1px solid #aaa", padding: 12, marginTop: 16 }}>
           <h3>編集</h3>
 
-          <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
+          <div style={{ display: "grid", gap: 10, maxWidth: 760 }}>
             <label>
               日付
               <input
@@ -618,18 +638,19 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               </select>
             </label>
 
-            <label>
-              値段（税込・四則演算と括弧が使用可能）
-              <input
-                value={editing.amount_expression}
-                onChange={(event) =>
-                  setEditing({
-                    ...editing,
-                    amount_expression: event.target.value,
-                  })
-                }
-              />
-            </label>
+            <AmountCalculator
+              id={`editing-amount-expression-${editing.id}`}
+              expression={editing.amount_expression}
+              taxRate={editing.tax_rate}
+              disabled={saving}
+              onExpressionChange={(nextExpression) =>
+                setEditing({
+                  ...editing,
+                  amount_expression: nextExpression,
+                })
+              }
+              onResultChange={setEditingCalculation}
+            />
 
             <label>
               税率（%）
@@ -649,6 +670,7 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
               items={editing.line_items}
               txType={editing.tx_type}
               defaultCategory={editing.category}
+              expectedAmount={editingCalculation?.amount}
               disabled={saving}
               onChange={(lineItems) =>
                 setEditing({ ...editing, line_items: lineItems })
@@ -666,10 +688,17 @@ export function EncryptedTxView({ refreshKey = 0 }: EncryptedTxViewProps) {
             </label>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => void handleUpdate()} disabled={saving}>
-                {saving ? "処理中..." : "更新"}
+              <button
+                onClick={() => void handleUpdate()}
+                disabled={saving || editingCalculation === null}
+              >
+                {saving
+                  ? "処理中..."
+                  : editingCalculation
+                    ? `${editingCalculation.amount.toLocaleString()}円で更新`
+                    : "計算結果を確認してください"}
               </button>
-              <button onClick={() => setEditing(null)} disabled={saving}>
+              <button onClick={cancelEdit} disabled={saving}>
                 キャンセル
               </button>
             </div>
