@@ -50,7 +50,7 @@ function downloadBlob(blob: Blob, mimeType: string): string {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   const extension = tutorialFileExtension(mimeType);
-  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   anchor.href = objectUrl;
   anchor.download = `kakeibo-operation-guide-${date}.${extension}`;
   anchor.style.display = "none";
@@ -71,6 +71,11 @@ export function TutorialVideoButton() {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  function closePreview() {
+    setState({ kind: "idle" });
+    setPreviewUrl(null);
+  }
 
   async function handleCreateVideo() {
     if (state.kind === "generating") return;
@@ -154,10 +159,7 @@ export function TutorialVideoButton() {
               >
                 動画を保存
               </a>
-              <button
-                type="button"
-                onClick={() => setState({ kind: "idle" })}
-              >
+              <button type="button" onClick={closePreview}>
                 閉じる
               </button>
             </div>
