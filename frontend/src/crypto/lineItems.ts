@@ -11,10 +11,17 @@ export type ValidatedLineItem = {
   memo?: string;
 };
 
-export function emptyLineItemDraft(category: string): LineItemDraft {
+export function emptyLineItemDraft(
+  category: string,
+  initialAmount = 0,
+): LineItemDraft {
+  if (!Number.isFinite(initialAmount) || !Number.isInteger(initialAmount)) {
+    throw new Error("明細の初期金額は整数で指定してください");
+  }
+
   return {
     name: "",
-    amount: "0",
+    amount: String(initialAmount),
     category: category.trim() || "未分類",
   };
 }
@@ -81,9 +88,10 @@ export function assertLineItemTotal(
   if (detailTotal === totalAmount) return;
 
   const difference = totalAmount - detailTotal;
-  const adjustmentExample = difference < 0
-    ? `割引明細を${difference.toLocaleString()}円で追加`
-    : `調整明細を+${difference.toLocaleString()}円で追加`;
+  const adjustmentExample =
+    difference < 0
+      ? `割引明細を${difference.toLocaleString()}円で追加`
+      : `調整明細を+${difference.toLocaleString()}円で追加`;
 
   throw new Error(
     `明細合計${detailTotal.toLocaleString()}円と取引金額` +
