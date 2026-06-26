@@ -26,7 +26,6 @@ from app.models import (
     UserCategoryOverride,
     calc_tax_amount,
 )
-from app.ocr import extract_receipt_fields, load_image, preprocess_for_ocr, run_ocr
 from app.ocr.gemini_extract import extract_with_gemini, is_gemini_available
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
@@ -86,6 +85,26 @@ def _tax_rate_for(category: str | None, session: Session) -> int:
         return 10
     row = session.get(CategoryMaster, category)
     return row.tax_rate if row else 10
+
+
+def _load_tesseract_runtime():
+    """Import image and OCR libraries only when receipt OCR is requested."""
+    try:
+        from app.ocr.extract import extract_receipt_fields, run_ocr
+        from app.ocr.preprocess import load_image, preprocess_for_ocr
+    except (ImportError, OSError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "ocr_runtime_unavailable",
+                "message": (
+                    "OCR実行環境がありません。OpenCV、Pillow、pillow-heif、"
+                    "pytesseractとTesseract本体を追加するか、Gemini OCRを設定してください。"
+                ),
+            },
+        ) from exc
+
+    return extract_receipt_fields, load_image, preprocess_for_ocr, run_ocr
 
 
 async def _read_upload_file(file: UploadFile) -> tuple[str, bytes]:
@@ -152,6 +171,13 @@ def _analyze_receipt(
             gemini_ok = False
 
     if not gemini_ok:
+        (
+            extract_receipt_fields,
+            load_image,
+            preprocess_for_ocr,
+            run_ocr,
+        ) = _load_tesseract_runtime()
+
         try:
             bgr = load_image(data)
         except Exception as e:

@@ -1,0 +1,4 @@
+fastapi==0.138.1
+uvicorn==0.49.0
+sqlmodel==0.0.38
+python-multipart==0.0.32
