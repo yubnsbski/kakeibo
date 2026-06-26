@@ -62,15 +62,22 @@ export async function commitCsv(file: File): Promise<CsvCommitResponse> {
   return handle<CsvCommitResponse>(r);
 }
 
+export type AmountMode = "tax_included" | "tax_excluded";
+
 export interface AmountCalculationResponse {
+  // Final amount paid, always tax-inclusive.
   amount: number;
+  net_amount: number;
   tax_rate: number;
   tax_amount: number;
+  input_amount: number;
+  amount_mode: AmountMode;
 }
 
 export async function calculateAmount(
   expression: string,
   taxRate: number,
+  amountMode: AmountMode = "tax_included",
 ): Promise<AmountCalculationResponse> {
   const r = await fetch(`${BASE}/calculations/amount`, {
     method: "POST",
@@ -78,6 +85,7 @@ export async function calculateAmount(
     body: JSON.stringify({
       expression,
       tax_rate: taxRate,
+      amount_mode: amountMode,
     }),
   });
   return handle<AmountCalculationResponse>(r);
