@@ -73,12 +73,23 @@ export function DraftLineItemsEditor({
       ? expectedAmount - total
       : null;
 
+  function addLineItem() {
+    const initialAmount =
+      items.length === 0 && expectedAmount !== undefined
+        ? expectedAmount
+        : 0;
+    onChange([
+      ...items,
+      emptyLineItemDraft(defaultCategory, initialAmount),
+    ]);
+  }
+
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <h4 style={{ marginBottom: 0 }}>明細（任意）</h4>
       <p className="hint" style={{ margin: 0 }}>
-        明細を追加しない場合は取引金額と同額の明細を自動生成します。
-        割引・調整はマイナス金額の明細として追加できます。
+        最初の明細には現在の税込計算結果を自動入力します。
+        2件目以降は0円から追加し、割引・調整はマイナス金額で入力できます。
       </p>
 
       {items.map((item, index) => (
@@ -133,13 +144,14 @@ export function DraftLineItemsEditor({
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button
           type="button"
-          disabled={disabled}
-          onClick={() =>
-            onChange([...items, emptyLineItemDraft(defaultCategory)])
-          }
+          disabled={disabled || expectedAmount === undefined}
+          onClick={addLineItem}
         >
           明細を追加
         </button>
+        {expectedAmount === undefined && items.length === 0 && (
+          <span className="hint">先に金額を計算してください。</span>
+        )}
         {items.length > 0 && (
           <TotalStatus total={total} expectedAmount={expectedAmount} />
         )}
@@ -248,7 +260,7 @@ export function StoredLineItemsEditor({
                   : [
                       {
                         name: "",
-                        amount: 0,
+                        amount: expectedAmount ?? 0,
                         category: normalizeCategory(defaultCategory),
                       },
                     ],
