@@ -5,6 +5,7 @@ type TestRow = {
   date: string;
   tx_type: "expense" | "income";
   merchant: string;
+  amount_mode: "tax_included" | "tax_excluded";
   amount: number;
   category: string;
   memo: string;
@@ -23,6 +24,7 @@ function makeRow(overrides: Partial<TestRow> = {}): TestRow {
     date: "2026-06-25",
     tx_type: "expense",
     merchant: "テスト店舗",
+    amount_mode: "tax_included",
     amount,
     category,
     memo: "",
