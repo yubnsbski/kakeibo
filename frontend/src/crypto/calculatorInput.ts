@@ -32,9 +32,12 @@ function stripLastSignificantCharacter(expression: string): string {
 }
 
 function currentNumberToken(expression: string): string {
-  const normalized = expression.replace(/[×]/g, "*").replace(/[÷]/g, "/").replace(/[−]/g, "-");
+  const normalized = expression
+    .replace(/[×]/g, "*")
+    .replace(/[÷]/g, "/")
+    .replace(/[−]/g, "-");
   const parts = normalized.split(/[+\-*/()]/);
-  return parts.at(-1)?.trim() ?? "";
+  return (parts[parts.length - 1] ?? "").trim();
 }
 
 function unmatchedOpenParentheses(expression: string): number {
@@ -83,7 +86,7 @@ function appendOperator(expression: string, operator: string): string {
 
   if (OPERATOR_PATTERN.test(last)) {
     const withoutOperator = stripLastSignificantCharacter(base);
-    if (!withoutOperator && operator === "-") return "-";
+    if (!withoutOperator) return operator === "-" ? "-" : `0${operator}`;
     return `${withoutOperator}${operator}`;
   }
 
