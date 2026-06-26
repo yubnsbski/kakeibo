@@ -1,7 +1,7 @@
 import type {
   AmountCalculationResponse,
   AmountMode,
-} from "../api";
+} from "../api.js";
 
 function roundYen(value: number): number {
   return Math.round(value);
