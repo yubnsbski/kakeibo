@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { CSSProperties } from "react";
 import {
   calculateAmount,
@@ -238,6 +244,20 @@ export function AmountCalculator({
   const [status, setStatus] = useState<PreviewStatus>({ kind: "idle" });
   const requestSequence = useRef(0);
   const immediateSignature = useRef<string | null>(null);
+  const initializedManualCalculator = useRef(false);
+
+  useLayoutEffect(() => {
+    if (initializedManualCalculator.current) return;
+    initializedManualCalculator.current = true;
+
+    if (id === "manual-amount-expression" && expression === "1000") {
+      immediateSignature.current = calculationSignature("0", taxRate, amountMode);
+      requestSequence.current += 1;
+      setStatus({ kind: "idle" });
+      onResultChange?.(null);
+      onExpressionChange("0");
+    }
+  }, [amountMode, expression, id, onExpressionChange, onResultChange, taxRate]);
 
   const runCalculation = useCallback(
     async (
