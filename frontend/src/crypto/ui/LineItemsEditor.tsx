@@ -16,10 +16,39 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
 };
 
+function adjustmentLabel(difference: number): string {
+  return difference < 0 ? "割引" : "調整";
+}
+
+function TotalStatus({
+  total,
+  expectedAmount,
+}: {
+  total: number | null;
+  expectedAmount?: number;
+}) {
+  if (total === null) {
+    return <span className="hint">明細合計: 入力確認中</span>;
+  }
+
+  if (expectedAmount === undefined) {
+    return <span className="hint">明細合計: {total.toLocaleString()}円</span>;
+  }
+
+  const difference = expectedAmount - total;
+  return (
+    <span className={difference === 0 ? "hint" : "err"}>
+      明細合計: {total.toLocaleString()}円 / 計算結果: {expectedAmount.toLocaleString()}円
+      {difference !== 0 && ` / 差額: ${difference.toLocaleString()}円`}
+    </span>
+  );
+}
+
 type DraftEditorProps = {
   items: LineItemDraft[];
   txType: TxType;
   defaultCategory: string;
+  expectedAmount?: number;
   disabled?: boolean;
   onChange: (items: LineItemDraft[]) => void;
 };
@@ -28,6 +57,7 @@ export function DraftLineItemsEditor({
   items,
   txType,
   defaultCategory,
+  expectedAmount,
   disabled = false,
   onChange,
 }: DraftEditorProps) {
@@ -38,6 +68,10 @@ export function DraftLineItemsEditor({
   const total = canShowTotal
     ? parsedAmounts.reduce((sum, amount) => sum + amount, 0)
     : null;
+  const difference =
+    expectedAmount !== undefined && total !== null
+      ? expectedAmount - total
+      : null;
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
@@ -107,9 +141,25 @@ export function DraftLineItemsEditor({
           明細を追加
         </button>
         {items.length > 0 && (
-          <span className="hint">
-            明細合計: {total === null ? "入力確認中" : `${total.toLocaleString()}円`}
-          </span>
+          <TotalStatus total={total} expectedAmount={expectedAmount} />
+        )}
+        {items.length > 0 && difference !== null && difference !== 0 && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              onChange([
+                ...items,
+                {
+                  name: adjustmentLabel(difference),
+                  amount: String(difference),
+                  category: normalizeCategory(defaultCategory),
+                },
+              ])
+            }
+          >
+            差額{difference.toLocaleString()}円を明細に追加
+          </button>
         )}
       </div>
     </div>
@@ -120,6 +170,7 @@ type StoredEditorProps = {
   items: EncryptedLineItem[];
   txType: TxType;
   defaultCategory: string;
+  expectedAmount?: number;
   disabled?: boolean;
   onChange: (items: EncryptedLineItem[]) => void;
 };
@@ -128,9 +179,14 @@ export function StoredLineItemsEditor({
   items,
   txType,
   defaultCategory,
+  expectedAmount,
   disabled = false,
   onChange,
 }: StoredEditorProps) {
+  const total = lineItemTotal(items);
+  const difference =
+    expectedAmount === undefined ? null : expectedAmount - total;
+
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <h4 style={{ marginBottom: 0 }}>明細</h4>
@@ -221,9 +277,25 @@ export function StoredLineItemsEditor({
         >
           明細を追加
         </button>
-        <span className="hint">
-          明細合計: {lineItemTotal(items).toLocaleString()}円
-        </span>
+        <TotalStatus total={total} expectedAmount={expectedAmount} />
+        {difference !== null && difference !== 0 && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              onChange([
+                ...items,
+                {
+                  name: adjustmentLabel(difference),
+                  amount: difference,
+                  category: normalizeCategory(defaultCategory),
+                },
+              ])
+            }
+          >
+            差額{difference.toLocaleString()}円を明細に追加
+          </button>
+        )}
       </div>
     </div>
   );
