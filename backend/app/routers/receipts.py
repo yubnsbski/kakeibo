@@ -88,18 +88,10 @@ def _tax_rate_for(category: str | None, session: Session) -> int:
 
 
 def _load_tesseract_runtime():
-    """Import heavy OCR dependencies only when receipt OCR is requested.
-
-    Manual entry, amount calculation, encrypted storage, and aggregation can
-    therefore run on machines where OpenCV/Tesseract support is unavailable.
-    """
+    """Import image and OCR libraries only when receipt OCR is requested."""
     try:
-        from app.ocr import (
-            extract_receipt_fields,
-            load_image,
-            preprocess_for_ocr,
-            run_ocr,
-        )
+        from app.ocr.extract import extract_receipt_fields, run_ocr
+        from app.ocr.preprocess import load_image, preprocess_for_ocr
     except (ImportError, OSError) as exc:
         raise HTTPException(
             status_code=503,
