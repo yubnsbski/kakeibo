@@ -5,6 +5,7 @@ import { CryptoGate } from "./crypto/ui/CryptoGate";
 import { TaxAwareEncryptedTxView } from "./crypto/ui/TaxAwareEncryptedTxView";
 import { EncryptedSummaryView } from "./crypto/ui/EncryptedSummaryView";
 import { EncryptedGraphView } from "./crypto/ui/EncryptedGraphView";
+import { TutorialVideoButton } from "./tutorial/TutorialVideoButton";
 import "./crypto/crypto-ui.css";
 
 type Tab = "upload" | "list" | "summary" | "graph";
@@ -16,34 +17,48 @@ export default function App() {
   return (
     <CryptoGate>
       <div className="app">
-        <header className="app-header">
+        <header
+          className="app-header"
+          style={{ gap: 12, flexWrap: "wrap" }}
+        >
           <h1>家計簿</h1>
-          <nav className="tabs">
-            <button
-              className={tab === "upload" ? "active" : ""}
-              onClick={() => setTab("upload")}
-            >
-              取込
-            </button>
-            <button
-              className={tab === "list" ? "active" : ""}
-              onClick={() => setTab("list")}
-            >
-              一覧
-            </button>
-            <button
-              className={tab === "summary" ? "active" : ""}
-              onClick={() => setTab("summary")}
-            >
-              集計
-            </button>
-            <button
-              className={tab === "graph" ? "active" : ""}
-              onClick={() => setTab("graph")}
-            >
-              グラフ
-            </button>
-          </nav>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <TutorialVideoButton />
+            <nav className="tabs">
+              <button
+                className={tab === "upload" ? "active" : ""}
+                onClick={() => setTab("upload")}
+              >
+                取込
+              </button>
+              <button
+                className={tab === "list" ? "active" : ""}
+                onClick={() => setTab("list")}
+              >
+                一覧
+              </button>
+              <button
+                className={tab === "summary" ? "active" : ""}
+                onClick={() => setTab("summary")}
+              >
+                集計
+              </button>
+              <button
+                className={tab === "graph" ? "active" : ""}
+                onClick={() => setTab("graph")}
+              >
+                グラフ
+              </button>
+            </nav>
+          </div>
         </header>
 
         <main>
