@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import {
   calculateAmount,
   type AmountCalculationResponse,
+  type AmountMode,
 } from "../../api";
 import {
   applyCalculatorCommand,
@@ -19,8 +20,11 @@ type AmountCalculatorProps = {
   id: string;
   expression: string;
   taxRate: string;
+  amountMode: AmountMode;
   disabled?: boolean;
   onExpressionChange: (expression: string) => void;
+  onTaxRateChange: (taxRate: string) => void;
+  onAmountModeChange: (amountMode: AmountMode) => void;
   onResultChange?: (result: AmountCalculationResponse | null) => void;
 };
 
@@ -55,57 +59,105 @@ const keypad: KeyDefinition[] = [
 
 const panelStyle: CSSProperties = {
   border: "1px solid #d0d7de",
-  borderRadius: 14,
-  padding: 14,
+  borderRadius: 16,
+  padding: 16,
   background: "#ffffff",
+  color: "#1f2328",
   display: "grid",
-  gap: 12,
-  maxWidth: 520,
+  gap: 14,
+  maxWidth: 560,
+  boxShadow: "0 4px 16px rgba(31, 35, 40, 0.08)",
 };
 
 const displayStyle: CSSProperties = {
   border: "1px solid #d8dee4",
-  borderRadius: 12,
-  padding: "14px 16px",
-  minHeight: 88,
+  borderRadius: 14,
+  padding: "16px",
+  minHeight: 154,
   background: "#f6f8fa",
+  color: "#1f2328",
   display: "grid",
-  alignContent: "center",
-  justifyItems: "end",
-  gap: 4,
+  gap: 10,
 };
 
 const keypadStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(54px, 1fr))",
+  gridTemplateColumns: "repeat(4, minmax(56px, 1fr))",
   gap: 8,
 };
 
 const baseKeyStyle: CSSProperties = {
-  minHeight: 48,
+  minHeight: 50,
   borderRadius: 12,
-  border: "1px solid #d0d7de",
-  fontSize: "1.1rem",
-  fontWeight: 600,
+  border: "1px solid #b6bec8",
+  color: "#1f2328",
+  WebkitTextFillColor: "#1f2328",
+  fontSize: "1.15rem",
+  lineHeight: 1,
+  fontWeight: 700,
   cursor: "pointer",
+  boxShadow: "0 1px 2px rgba(31, 35, 40, 0.08)",
+};
+
+const taxSummaryStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 8,
+  width: "100%",
 };
 
 function keyStyle(kind: KeyDefinition["kind"]): CSSProperties {
   if (kind === "operator") {
     return {
       ...baseKeyStyle,
-      background: "#eef2f5",
+      background: "#dbeafe",
+      color: "#075985",
+      WebkitTextFillColor: "#075985",
+      borderColor: "#93c5fd",
     };
   }
   if (kind === "control") {
     return {
       ...baseKeyStyle,
-      background: "#fff8e6",
+      background: "#fff4d6",
+      color: "#7c2d12",
+      WebkitTextFillColor: "#7c2d12",
+      borderColor: "#f2c66d",
     };
   }
   return {
     ...baseKeyStyle,
     background: "#ffffff",
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
+  };
+}
+
+function modeButtonStyle(selected: boolean): CSSProperties {
+  return {
+    flex: "1 1 150px",
+    minHeight: 46,
+    borderRadius: 12,
+    border: selected ? "2px solid #1f6feb" : "1px solid #b6bec8",
+    background: selected ? "#1f6feb" : "#ffffff",
+    color: selected ? "#ffffff" : "#1f2328",
+    WebkitTextFillColor: selected ? "#ffffff" : "#1f2328",
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+}
+
+function taxRateButtonStyle(selected: boolean): CSSProperties {
+  return {
+    minWidth: 58,
+    minHeight: 40,
+    borderRadius: 999,
+    border: selected ? "2px solid #2da44e" : "1px solid #b6bec8",
+    background: selected ? "#dafbe1" : "#ffffff",
+    color: selected ? "#116329" : "#1f2328",
+    WebkitTextFillColor: selected ? "#116329" : "#1f2328",
+    fontWeight: 700,
+    cursor: "pointer",
   };
 }
 
@@ -121,12 +173,54 @@ function cleanErrorMessage(error: unknown): string {
   return message.replace(/^\d{3}:\s*/, "");
 }
 
+function modeLabel(mode: AmountMode): string {
+  return mode === "tax_excluded" ? "税抜で入力" : "税込で入力";
+}
+
+function SummaryCell({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: number | null;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid #d8dee4",
+        borderRadius: 10,
+        padding: "9px 8px",
+        textAlign: "center",
+        background: emphasis ? "#eefbf2" : "#ffffff",
+        minWidth: 0,
+      }}
+    >
+      <div style={{ color: "#57606a", fontSize: "0.76rem" }}>{label}</div>
+      <div
+        style={{
+          color: "#1f2328",
+          fontSize: "0.98rem",
+          fontWeight: emphasis ? 800 : 650,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value === null ? "—" : `${value.toLocaleString()}円`}
+      </div>
+    </div>
+  );
+}
+
 export function AmountCalculator({
   id,
   expression,
   taxRate,
+  amountMode,
   disabled = false,
   onExpressionChange,
+  onTaxRateChange,
+  onAmountModeChange,
   onResultChange,
 }: AmountCalculatorProps) {
   const [status, setStatus] = useState<PreviewStatus>({ kind: "idle" });
@@ -153,7 +247,11 @@ export function AmountCalculator({
     onResultChange?.(null);
 
     try {
-      const result = await calculateAmount(trimmedExpression, parsedTaxRate);
+      const result = await calculateAmount(
+        trimmedExpression,
+        parsedTaxRate,
+        amountMode,
+      );
       if (requestId !== requestSequence.current) return;
       setStatus({ kind: "success", result });
       onResultChange?.(result);
@@ -162,7 +260,7 @@ export function AmountCalculator({
       setStatus({ kind: "error", message: cleanErrorMessage(error) });
       onResultChange?.(null);
     }
-  }, [expression, onResultChange, taxRate]);
+  }, [amountMode, expression, onResultChange, taxRate]);
 
   useEffect(() => {
     requestSequence.current += 1;
@@ -174,53 +272,144 @@ export function AmountCalculator({
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [expression, onResultChange, runCalculation, taxRate]);
+  }, [amountMode, expression, onResultChange, runCalculation, taxRate]);
 
   function handleKey(command: CalculatorCommand) {
     onExpressionChange(applyCalculatorCommand(expression, command));
   }
 
   const result = status.kind === "success" ? status.result : null;
+  const selectedTaxRate = parseTaxRate(taxRate);
 
   return (
     <div style={panelStyle}>
-      <label htmlFor={id} style={{ fontWeight: 600 }}>
-        値段（税込）
-      </label>
+      <div>
+        <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>金額を計算</div>
+        <div className="hint" style={{ marginTop: 3 }}>
+          入力する金額が税込か税抜かを先に選びます。
+        </div>
+      </div>
+
+      <div
+        role="group"
+        aria-label="金額の入力方式"
+        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+      >
+        <button
+          type="button"
+          aria-pressed={amountMode === "tax_included"}
+          disabled={disabled}
+          style={modeButtonStyle(amountMode === "tax_included")}
+          onClick={() => onAmountModeChange("tax_included")}
+        >
+          税込で入力
+        </button>
+        <button
+          type="button"
+          aria-pressed={amountMode === "tax_excluded"}
+          disabled={disabled}
+          style={modeButtonStyle(amountMode === "tax_excluded")}
+          onClick={() => onAmountModeChange("tax_excluded")}
+        >
+          税抜で入力
+        </button>
+      </div>
 
       <div style={displayStyle} aria-live="polite">
-        <div style={{ fontSize: "0.82rem", color: "#57606a", maxWidth: "100%" }}>
-          {expression.trim() ? `式: ${expression}` : "式を入力してください"}
+        <div style={{ color: "#57606a", fontSize: "0.8rem" }}>
+          {modeLabel(amountMode)}
+          {expression.trim() ? `：${expression}` : "：式を入力してください"}
         </div>
-        <div style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1.15 }}>
-          {result
-            ? `¥${result.amount.toLocaleString()}`
-            : status.kind === "loading"
-              ? "計算中…"
-              : "—"}
-        </div>
-        {result && (
-          <div style={{ fontSize: "0.82rem", color: "#57606a" }}>
-            内税 {result.tax_amount.toLocaleString()}円（税率{result.tax_rate}%）
+
+        <div style={{ display: "grid", justifyItems: "end", gap: 2 }}>
+          <div style={{ color: "#57606a", fontSize: "0.8rem" }}>
+            支払額（税込）
           </div>
-        )}
+          <div
+            style={{
+              color: "#111827",
+              fontSize: "2.15rem",
+              fontWeight: 850,
+              lineHeight: 1.1,
+            }}
+          >
+            {result
+              ? `¥${result.amount.toLocaleString()}`
+              : status.kind === "loading"
+                ? "計算中…"
+                : "—"}
+          </div>
+        </div>
+
+        <div style={taxSummaryStyle}>
+          <SummaryCell label="税抜" value={result?.net_amount ?? null} />
+          <SummaryCell label="消費税" value={result?.tax_amount ?? null} />
+          <SummaryCell label="税込" value={result?.amount ?? null} emphasis />
+        </div>
+
         {status.kind === "error" && (
-          <div className="err" style={{ fontSize: "0.85rem" }}>
+          <div className="err" style={{ fontSize: "0.86rem", fontWeight: 650 }}>
             {status.message}
           </div>
         )}
       </div>
 
+      <label htmlFor={id} style={{ fontWeight: 700 }}>
+        {amountMode === "tax_excluded" ? "税抜金額・計算式" : "税込金額・計算式"}
+      </label>
       <input
         id={id}
         value={expression}
         disabled={disabled}
         autoComplete="off"
+        inputMode="decimal"
         spellCheck={false}
         placeholder="例: (1200 + 300) / 2"
         aria-label="値段の計算式"
+        style={{
+          minHeight: 46,
+          padding: "10px 12px",
+          border: "1px solid #b6bec8",
+          borderRadius: 10,
+          color: "#111827",
+          background: "#ffffff",
+          fontSize: "1.05rem",
+        }}
         onChange={(event) => onExpressionChange(event.target.value)}
       />
+
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ fontWeight: 700 }}>税率</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {[0, 8, 10].map((rate) => (
+            <button
+              key={rate}
+              type="button"
+              aria-pressed={selectedTaxRate === rate}
+              disabled={disabled}
+              style={taxRateButtonStyle(selectedTaxRate === rate)}
+              onClick={() => onTaxRateChange(String(rate))}
+            >
+              {rate}%
+            </button>
+          ))}
+          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span className="hint">その他</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={taxRate}
+              disabled={disabled}
+              aria-label="税率"
+              style={{ width: 76, minHeight: 40 }}
+              onChange={(event) => onTaxRateChange(event.target.value)}
+            />
+            <span>%</span>
+          </label>
+        </div>
+      </div>
 
       <div style={keypadStyle} aria-label="値段入力電卓">
         {keypad.map((key) => (
@@ -247,12 +436,13 @@ export function AmountCalculator({
         type="button"
         disabled={disabled || status.kind === "loading"}
         style={{
-          minHeight: 48,
+          minHeight: 50,
           borderRadius: 999,
           border: "none",
           background: "#2da44e",
-          color: "white",
-          fontWeight: 700,
+          color: "#ffffff",
+          WebkitTextFillColor: "#ffffff",
+          fontWeight: 800,
           fontSize: "1rem",
           cursor: "pointer",
         }}
@@ -262,7 +452,7 @@ export function AmountCalculator({
       </button>
 
       <p className="hint" style={{ margin: 0 }}>
-        入力後約0.3秒で自動計算します。保存時にもバックエンドで再計算します。
+        入力後約0.3秒で自動計算します。1円未満は四捨五入し、保存時にも再計算します。
       </p>
     </div>
   );
