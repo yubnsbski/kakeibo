@@ -1,13 +1,15 @@
 """SQLite + SQLModel database wiring with seeding."""
 from __future__ import annotations
-import os
+
 from collections.abc import Generator
 from pathlib import Path
+
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from .data_paths import resolve_database_path
+
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_DB_PATH = _BACKEND_ROOT / "data.db"
-DB_PATH = os.getenv("KAKEIBO_DB_PATH", str(_DEFAULT_DB_PATH))
+DB_PATH = resolve_database_path(_BACKEND_ROOT)
 DB_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(DB_URL, echo=False, connect_args={"check_same_thread": False})
@@ -36,31 +38,48 @@ _INITIAL_CATEGORIES = [
 
 
 def create_db_and_tables() -> None:
-    from . import models  # noqa: F401
     from . import crypto_models  # noqa: F401  (E2E暗号テーブル登録)
+    from . import models  # noqa: F401
+
     SQLModel.metadata.create_all(engine)
+    try:
+        DB_PATH.chmod(0o600)
+    except OSError:
+        # Some filesystems do not support POSIX permissions.
+        pass
     _seed_categories()
 
 
 def _seed_categories() -> None:
     from .models import CategoryMaster
+
     with Session(engine) as session:
         existing = session.exec(select(CategoryMaster)).first()
         if existing is not None:
             existing_names = {c.name for c in session.exec(select(CategoryMaster)).all()}
             for name, desc, rate, order, is_income in _INITIAL_CATEGORIES:
                 if name not in existing_names:
-                    session.add(CategoryMaster(
-                        name=name, description=desc, tax_rate=rate,
-                        sort_order=order, is_income=is_income,
-                    ))
+                    session.add(
+                        CategoryMaster(
+                            name=name,
+                            description=desc,
+                            tax_rate=rate,
+                            sort_order=order,
+                            is_income=is_income,
+                        )
+                    )
             session.commit()
             return
         for name, desc, rate, order, is_income in _INITIAL_CATEGORIES:
-            session.add(CategoryMaster(
-                name=name, description=desc, tax_rate=rate,
-                sort_order=order, is_income=is_income,
-            ))
+            session.add(
+                CategoryMaster(
+                    name=name,
+                    description=desc,
+                    tax_rate=rate,
+                    sort_order=order,
+                    is_income=is_income,
+                )
+            )
         session.commit()
 
 
