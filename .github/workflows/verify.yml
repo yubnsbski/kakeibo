@@ -19,26 +19,8 @@ jobs:
           node-version: 22
       - name: Install root dependencies
         run: npm install --no-audit --no-fund
-      - name: Capture typecheck result
-        id: typecheck
-        shell: bash
-        run: |
-          set +e
-          npm run typecheck > typecheck.log 2>&1
-          status=$?
-          cat typecheck.log
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload typecheck diagnostics
-        if: steps.typecheck.outputs.status != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: root-typecheck-diagnostics
-          path: typecheck.log
-          if-no-files-found: error
-      - name: Fail on typecheck errors
-        if: steps.typecheck.outputs.status != '0'
-        run: exit 1
+      - name: Typecheck
+        run: npm run typecheck
       - name: Tests
         run: npm test
 
