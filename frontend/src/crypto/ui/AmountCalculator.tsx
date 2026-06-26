@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   calculateAmount,
@@ -177,6 +177,51 @@ function modeLabel(mode: AmountMode): string {
   return mode === "tax_excluded" ? "税抜で入力" : "税込で入力";
 }
 
+function roundHalfUp(value: number): number {
+  return Math.floor(value + 0.5);
+}
+
+function localPlainNumberCalculation(
+  expression: string,
+  taxRate: number | null,
+  amountMode: AmountMode,
+): AmountCalculationResponse | null {
+  if (taxRate === null) return null;
+
+  const normalized = expression.trim().replace(/[，,]/g, "");
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) {
+    return null;
+  }
+
+  const inputAmount = roundHalfUp(Number(normalized));
+  if (!Number.isFinite(inputAmount) || inputAmount < 0) return null;
+
+  if (amountMode === "tax_excluded") {
+    const taxAmount = taxRate <= 0 ? 0 : roundHalfUp(inputAmount * taxRate / 100);
+    return {
+      input_amount: inputAmount,
+      net_amount: inputAmount,
+      tax_amount: taxAmount,
+      amount: inputAmount + taxAmount,
+      tax_rate: taxRate,
+      amount_mode: amountMode,
+    };
+  }
+
+  const taxAmount =
+    inputAmount <= 0 || taxRate <= 0
+      ? 0
+      : roundHalfUp(inputAmount * taxRate / (100 + taxRate));
+  return {
+    input_amount: inputAmount,
+    net_amount: inputAmount - taxAmount,
+    tax_amount: taxAmount,
+    amount: inputAmount,
+    tax_rate: taxRate,
+    amount_mode: amountMode,
+  };
+}
+
 function SummaryCell({
   label,
   value,
@@ -225,6 +270,24 @@ export function AmountCalculator({
 }: AmountCalculatorProps) {
   const [status, setStatus] = useState<PreviewStatus>({ kind: "idle" });
   const requestSequence = useRef(0);
+  const initializedManualZero = useRef(false);
+
+  const selectedTaxRate = parseTaxRate(taxRate);
+  const optimisticResult = useMemo(
+    () => localPlainNumberCalculation(expression, selectedTaxRate, amountMode),
+    [amountMode, expression, selectedTaxRate],
+  );
+
+  useEffect(() => {
+    if (
+      id === "manual-amount-expression" &&
+      !initializedManualZero.current &&
+      expression === "1000"
+    ) {
+      initializedManualZero.current = true;
+      onExpressionChange("0");
+    }
+  }, [expression, id, onExpressionChange]);
 
   const runCalculation = useCallback(async () => {
     const trimmedExpression = expression.trim();
@@ -243,8 +306,18 @@ export function AmountCalculator({
       return;
     }
 
+    const localResult = localPlainNumberCalculation(
+      trimmedExpression,
+      parsedTaxRate,
+      amountMode,
+    );
+    if (localResult && localResult.amount <= 0) {
+      setStatus({ kind: "idle" });
+      onResultChange?.(null);
+      return;
+    }
+
     setStatus({ kind: "loading" });
-    onResultChange?.(null);
 
     try {
       const result = await calculateAmount(
@@ -265,21 +338,27 @@ export function AmountCalculator({
   useEffect(() => {
     requestSequence.current += 1;
     setStatus({ kind: "idle" });
-    onResultChange?.(null);
+
+    if (optimisticResult) {
+      onResultChange?.(optimisticResult.amount > 0 ? optimisticResult : null);
+      if (optimisticResult.amount <= 0) return;
+    } else {
+      onResultChange?.(null);
+    }
 
     const timer = window.setTimeout(() => {
       void runCalculation();
-    }, 300);
+    }, 180);
 
     return () => window.clearTimeout(timer);
-  }, [amountMode, expression, onResultChange, runCalculation, taxRate]);
+  }, [amountMode, expression, onResultChange, optimisticResult, runCalculation, taxRate]);
 
   function handleKey(command: CalculatorCommand) {
     onExpressionChange(applyCalculatorCommand(expression, command));
   }
 
-  const result = status.kind === "success" ? status.result : null;
-  const selectedTaxRate = parseTaxRate(taxRate);
+  const confirmedResult = status.kind === "success" ? status.result : null;
+  const result = status.kind === "error" ? null : confirmedResult ?? optimisticResult;
 
   return (
     <div style={panelStyle}>
@@ -347,6 +426,11 @@ export function AmountCalculator({
           <SummaryCell label="税込" value={result?.amount ?? null} emphasis />
         </div>
 
+        {status.kind === "loading" && result && (
+          <div className="hint" style={{ fontSize: "0.8rem", textAlign: "right" }}>
+            サーバーで確認中…
+          </div>
+        )}
         {status.kind === "error" && (
           <div className="err" style={{ fontSize: "0.86rem", fontWeight: 650 }}>
             {status.message}
@@ -452,7 +536,7 @@ export function AmountCalculator({
       </button>
 
       <p className="hint" style={{ margin: 0 }}>
-        入力後約0.3秒で自動計算します。1円未満は四捨五入し、保存時にも再計算します。
+        0円から開始し、数字キーを押すと画面へ即時反映します。保存時にも再計算します。
       </p>
     </div>
   );
